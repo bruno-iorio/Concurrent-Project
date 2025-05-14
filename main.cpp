@@ -1,11 +1,11 @@
 #include <iostream>
 #include <vector>
 #include <limits>
-
+#include <algorithm>
 void initializeGraph(std::vector<std::vector<int>>& Edges,int& n, int& maxEdge){
   for(int i = 0; i < n; i++){
     for(int j = 0; j != i; j++){
-      std::cout << "Input the weight of Edge (-1 means unreachable)" << i << " and " << j " ";
+      std::cout << "Input the weight of Edge (-1 means unreachable)" << i << " and " << j << " ";
       std::cin >> Edges[i][j];
       Edges[j][i] = Edges[i][j];
       if (Edges[i][j] > maxEdge){
@@ -22,11 +22,11 @@ class DeltaStepping{ // sequential version of the algorithm
       this->n = graph.size();
       this->maxEdge = maxEdge;
       this->delta = delta;
-
+      this->graph = graph;
       int n_buckets = maxEdge / delta  + 1;
       B = std::vector<std::vector<int>>(n_buckets);
-
-      tent = std::vector<int>(n,-1);
+      tent.resize(n);
+      std::fill(tent.begin(),tent.end(),-1);
 
     }
     void findShortest(int source, int destination){
@@ -36,10 +36,10 @@ class DeltaStepping{ // sequential version of the algorithm
       while (!BucketEmpty(i)){
         std::vector<int> R;
         std::vector<std::pair<int,int>> Req;
-        while (!Buckets[i].empty()){
+        while (!B[i].empty()){
           Req  = findRequests(B[i],light);
           for(int e : B[i]){
-            if (!std::find(B[i].begin(),B[i].end(),e)) R.push_back(e); 
+            if (B[i].end() != std::find(B[i].begin(),B[i].end(),e)) R.push_back(e); 
           }
             B[i].clear();
             relaxRequest(Req);
@@ -48,10 +48,10 @@ class DeltaStepping{ // sequential version of the algorithm
         relaxRequest(Req);
         }
       }
-    }
+    
 
     std::vector<std::pair<int,int>> findRequests(std::vector<int> V, std::vector<int> kind){
-      res = std::vector<std::pair<int,int>>;
+      std::vector<std::pair<int,int>> res;
       for(int v : V){
         for (int w = 0; w != n; w++){
           if(graph[w][v] >= 0){
@@ -80,24 +80,28 @@ class DeltaStepping{ // sequential version of the algorithm
 
     void relax(int w, int x){
       if (x < tent[w]){
-        B[tent(w)/delta].erase(B[tent(w) / delta].begin(), B[tent(w)/delta].end(), w);
+        B[tent[w]/delta].erase(std::remove(B[tent[w] / delta].begin(), B[tent[w]/delta].end(), w));
         B[x / delta].push_back(w);
-        tent[w] = x;
+ tent[w] = x;
       }
     }
-    int delta; 
+    int delta, maxEdge;
+    size_t n;
+
     std::vector<double> tent;
-    std::vector<std::vector<int>> B;
-}
+    std::vector<std::vector<int>> graph, B;
+};
 
 void Dijkstra(std::vector<std::vector<int>> Graph, int source, int destination); // to be implemented
 
 int main(){
   int n; // number of nodes
+  int maxEdge;
   std::cout << " Input the number of Edges: ";
   std::cin >> n;
   std::vector<std::vector<int>> Graph(n, std::vector<int>(n,-1));
-  initializeGraph(Graph, n);
+  
+  initializeGraph(Graph, n,maxEdge);
   return 0;
 }
 
