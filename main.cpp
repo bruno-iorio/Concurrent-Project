@@ -6,6 +6,9 @@
 #include <utility>
 #include <unordered_set>
 #include <queue>
+#include <random>
+#include <algorithm>
+#include <thread>
 
 class Graph
 {
@@ -57,15 +60,15 @@ void Graph::parse_graph(const std::string &filename)
     }
 }
 
-class DeltaStepping
+class DeltaSteppingSequential
 {
 public:
     int delta;
     Graph graph;
-    std::vector<double> tent;
+    std::vector<int> tent;
     std::vector<std::unordered_set<int>> buckets;
 
-    DeltaStepping(Graph graph, double delta)
+    DeltaSteppingSequential(Graph graph, int delta)
     {
         this->graph = graph;
         this->delta = delta;
@@ -207,18 +210,259 @@ public:
     }
 };
 
+
+class DeltaSteppingParallelStatic
+{
+public:
+    int delta;
+    int num_threads;
+    Graph graph;
+    std::vector<double> tent;
+    std::vector<std::vector<std::unordered_set<int>>> buckets; //bucket - thread - set of elements
+    std::vector<int> owner; 
+    std::vector<std::vector<std::pair<int, double>>> NeighborsLight, NeighborsHeavy; //element - list of neighbors 
+    std::vector<std::vector<std::vector<std::pair<int,double>>>> ReqLight, ReqHeavy; //thread - list of requests for this thread
+
+    DeltaSteppingParallelStatic(const Graph& graph, double delta, int num_threads): 
+        graph(graph),
+        delta(delta),
+        num_threads(num_threads),
+        tent(graph.n, 2e9),
+        buckets(
+          graph.maxDist / delta + 1,
+          std::vector<std::unordered_set<int>>(num_threads)
+        ),
+        owner(graph.n, 0),
+        NeighborsLight(graph.n),
+        NeighborsHeavy(graph.n),
+        ReqLight(num_threads, std::vector<std::vector<std::pair<int, double>>>(num_threads)),
+        ReqHeavy(num_threads, std::vector<std::vector<std::pair<int, double>>>(num_threads))
+        {}
+
+    //fills in the neighbours graph
+    void fillNeighbors(){
+        for(int i = 0; i < graph.n; i++){
+            for(auto edge : graph.adj_lists[i]){
+                if(edge.second <= delta)
+                    NeighborsLight[i].push_back(edge);
+                else
+                    NeighborsHeavy[i].push_back(edge);
+            }
+        }
+    }
+
+    //assign owners to vertices
+    void assignThreads(){
+        int iter = 0;
+        for (int t = 0; t < num_threads; t++) {
+            int count = graph.n / num_threads + (t < (graph.n % num_threads) ? 1 : 0);
+            for (int i = 0; i < count; ++i) {
+                owner[iter++] = t;
+            }
+        }
+    
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::shuffle(owner.begin(), owner.end(), gen);
+    }
+    
+    
+    //thread, index of bucket
+    void loop1(int t, int i){
+        //generate Req_L(B_i_t) and Req_H(B_i_t)
+        for(auto from : buckets[i][t]){
+            //std::cout << "generating requests from " << from << std::endl;
+            generateRequests(from, true);
+            generateRequests(from, false);
+        }
+        buckets[i][t].clear();
+    }
+
+    void loop2(int t){
+        Relax(true, t);
+        for(int src = 0; src < num_threads; ++src) {
+            ReqLight[src][t].clear();
+        }
+    }
+
+    void loop3(int t){
+        
+        Relax(false, t);
+        for(int src = 0; src < num_threads; ++src) {
+            ReqHeavy[src][t].clear();
+        }
+    }
+
+    //kind values:
+    //0 - heavy requests
+    //1 - light requests
+    void generateRequests(int from, bool kind){
+        if(kind){
+            for(auto vertex : NeighborsLight[from]){
+                ReqLight[owner[from]][owner[vertex.first]].push_back(std::make_pair(vertex.first, tent[from] + vertex.second));
+            }
+        }
+        else{
+            for(auto vertex : NeighborsHeavy[from]){
+                ReqHeavy[owner[from]][owner[vertex.first]].push_back(std::make_pair(vertex.first, tent[from] + vertex.second));
+            }
+
+        }
+    }
+
+    //slightly different - relaxes the whole sublist for thread t instead of splitting it.
+    void Relax(bool kind, int to_thread){
+        if(kind){
+            for(int from_thread = 0;  from_thread < num_threads; from_thread++){
+                for(auto request : ReqLight[from_thread][to_thread]){
+                    int vertex = request.first;
+                    double propDist = request.second;
+                    if(propDist < tent[vertex]){
+                        tent[vertex] = propDist; 
+                        int i = int(tent[vertex] / delta);
+                        int j = int(propDist / delta);
+                        if(tent[vertex] != 2e9)
+                            buckets[i][to_thread].erase(vertex);
+                        buckets[j][to_thread].insert(vertex);
+                    }
+                }
+            }
+        }
+        else{
+            for(int from_thread = 0;  from_thread < num_threads; from_thread++){
+                for(auto request : ReqHeavy[from_thread][to_thread]){
+                    int vertex = request.first;
+                    double propDist = request.second;
+                    if(propDist < tent[vertex]){
+                        tent[vertex] = propDist; 
+                        double i = tent[vertex] / delta;
+                        double j = propDist / delta;
+                        if(tent[vertex] != 2e9)
+                            buckets[i][to_thread].erase(vertex);
+                        buckets[j][to_thread].insert(vertex);
+                    }
+                }
+            }
+        }
+    }
+
+    bool BucketsEmpty(int &non_empty_index){
+        for(int i = 0; i != buckets.size(); i++){
+            for(int j = 0; j != buckets[i].size(); j++){
+                if(!buckets[i][j].empty()){
+                    non_empty_index = i;
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    bool BucketEmpty(int index){
+        for(int j = 0; j != buckets[index].size(); j++){
+            if(!buckets[index][j].empty()){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void findShortest(int source){
+        //setup
+        fillNeighbors();
+        /*
+        std::cout << "graph light edges " << std::endl;
+        for(int i = 0; i < graph.n; i++){
+            std::cout << i << ": ";
+            for(auto j : NeighborsLight[i]){
+                std::cout << j.first << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+
+        std::cout << "graph heavy edges " << std::endl;
+        for(int i = 0; i < graph.n; i++){
+            std::cout << i << ": ";
+            for(auto j : NeighborsHeavy[i]){
+                std::cout << j.first << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+        */
+        assignThreads();
+
+        /*
+        std::cout << "owner threads" << std::endl;
+        for(auto th : owner){
+            std::cout << th << " ";
+        }
+        std::cout << std::endl;
+        */
+
+        //insert source to bucket 0
+        int own0 = owner[source];
+        buckets[0][own0].insert(source);
+
+        //set tentative distance of source to 0
+        tent[0] = 0;
+
+        //start loops
+        int index;
+        while(!BucketsEmpty(index)){
+            //std::cout << "entering nonempty bucket " << index << std::endl;
+            std::vector<std::thread> workers(num_threads);
+
+            while(!BucketEmpty(index)){
+
+                //std::cout << "entering loop 1" << std::endl;
+
+                //1st loop
+                for(int t = 0; t < num_threads; t++)
+                    workers[t] = std::thread(&DeltaSteppingParallelStatic::loop1, this, t, index);
+                for(int t = 0; t < num_threads; t++)
+                    workers[t].join();
+
+                //std::cout << "entering loop2" << std::endl;
+                        
+                //2nd loop
+                for(int t = 0; t < num_threads; t++)
+                    workers[t] = std::thread(&DeltaSteppingParallelStatic::loop2, this, t);
+                for(int t = 0; t < num_threads; t++)
+                    workers[t].join();
+            }
+
+            //std::cout << "entering loop 3" << std::endl;
+
+            //3rd loop
+            for(int t = 0; t < num_threads; t++)
+                workers[t] = std::thread(&DeltaSteppingParallelStatic::loop3, this,  t);
+            for(int t = 0; t < num_threads; t++)
+                workers[t].join();
+        }
+    }
+};
+
+
 int main()
 {
     Graph G;
     G.parse_graph("graphs/rome.gr");
 
-    DeltaStepping alg1(G, 2);
+    DeltaSteppingSequential alg1(G, 2);
     Dijkstra alg2(G);
+    DeltaSteppingParallelStatic alg3(G, 3, 10);
+
 
     alg1.findShortest(0);
     alg2.findShortest(0);
+    alg3.findShortest(0);
 
     // do they find the same distance
+    //for (int i = 0; i < G.n; i++)
+    //    std::cout << alg1.tent[i] - alg2.tent[i] << std::endl;
+    
     for (int i = 0; i < G.n; i++)
-        std::cout << alg1.tent[i] - alg2.tent[i] << std::endl;
+        std::cout << alg2.tent[i] - alg3.tent[i] << std::endl;
 }
