@@ -1,4 +1,4 @@
-CXX = g++                                # C++ compiler
+CXX = g++-14                             # C++ compiler
 CXXFLAGS = -fopenmp -O3                  # Compiler flags
 INCLUDES = -I.                           # Include current directory for .hpp files
 
