@@ -523,11 +523,11 @@ public:
 
 
 int main(int argc, char** argv) {
-    
+    /*
     std::vector<int> x = AlgL(20, 10);
     for(auto xs : x)
         std::cout << xs << " ";
-    /*
+    */
     if(argc < 4) {
         std::cerr << "Usage: " << argv[0] << " threads delta option\n";
         return 1;
@@ -565,7 +565,7 @@ int main(int argc, char** argv) {
         }
 
     return 0;
-    */
+    
     /*
     Graph G = randomGraph(10, 20);
     for(int i = 0; i < G.n; i++){
