@@ -9,15 +9,18 @@
 #include <random>
 #include <algorithm>
 #include <thread>
+#include <chrono>
+
 
 class Graph
 {
 public:
     int n;
     int maxDist;
-    std::vector<std::vector<std::pair<int, int>>> adj_lists;
+    std::vector<std::vector<std::pair<int, double>>> adj_lists;
     Graph() {};
     void parse_graph(const std::string &filename);
+    int maxDeg();
 };
 
 void Graph::parse_graph(const std::string &filename)
@@ -47,28 +50,102 @@ void Graph::parse_graph(const std::string &filename)
             // initialise n vectors of outgoing edges
             for (int i = 0; i < n; i++)
             {
-                std::vector<std::pair<int, int>> V;
+                std::vector<std::pair<int, double>> V;
                 adj_lists.push_back(V);
             }
         }
         else if (code == 'a')
         {
-            int u, v, w;
+            int u, v;
+            double w;
             in >> u >> v >> w;
             adj_lists[u - 1].push_back(std::make_pair(v - 1, w));
         }
     }
 }
 
+int Graph::maxDeg(){
+    int max_deg = 0;
+    for(int i = 0; i < n; i++)
+        max_deg = std::max(max_deg, int(adj_lists[i].size()));
+    return max_deg;
+}
+
+//https://en.wikipedia.org/wiki/Reservoir_sampling
+//algorithm L for sampling m values with no repetition from 1 to n.
+// Sample m distinct integers from [1..n], returned in res (size m)
+std::vector<int> AlgL(int n, int m) {
+    std::cout << n << "  " << m << std::endl;
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+
+    std::uniform_real_distribution<double> U(0.0, 1.0);
+    std::uniform_int_distribution<int> R(0, m-1);
+
+    std::vector<int> res(m);
+
+    double W = std::exp(std::log(U(gen)) / m);
+
+    int i = m;
+    while (true) {
+        double u = U(gen);
+        int s = int(std::floor(std::log(u) / std::log(1.0 - W))) + 1;
+        i += s;
+        if (i > n) break;
+
+        int idx = R(gen);
+        res[idx] = i;
+
+        W *= std::exp(std::log(U(gen)) / m);
+    }
+
+    return res;
+}
+
+//https://stackoverflow.com/questions/27086195/linear-index-upper-triangular-matrix
+//this is how we get edge from a random index
+//weights are U[0,1]
+Graph randomGraph(int n, int m){
+    Graph G;
+    G.n = n;
+    G.maxDist = 1e8;
+    
+    for (int i = 0; i < n; ++i) {
+        std::vector<std::pair<int, double>> V;
+        G.adj_lists.push_back(V);
+    }
+
+    std::cout << "kuurwa" << std::endl;
+    std::vector<int> edges = AlgL(n * (n - 1) / 2 , m);
+    for(auto e : edges){
+        std::cout << e << " ";
+    }
+
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_real_distribution<double> U(0.0, 1.0);
+    
+    for(auto e : edges){
+        int u = std::floor((1. + std::sqrt(1 + 8 * double(e))) / 2.);
+        int v = e + u * (3 - u) / 2;
+        u -= 1;
+        v -= 1;
+        G.adj_lists[u].push_back(std::make_pair(v, U(gen)));
+        G.adj_lists[v].push_back(std::make_pair(u, U(gen)));
+    }
+
+    return G;
+}
+
 class DeltaSteppingSequential
 {
 public:
-    int delta;
+    double delta;
     Graph graph;
-    std::vector<int> tent;
+    std::vector<double> tent;
     std::vector<std::unordered_set<int>> buckets;
 
-    DeltaSteppingSequential(Graph graph, int delta)
+    DeltaSteppingSequential(Graph graph, double delta)
     {
         this->graph = graph;
         this->delta = delta;
@@ -86,7 +163,7 @@ public:
         while (!BucketsEmpty(i))
         {
             std::unordered_set<int> R;
-            std::vector<std::pair<int, int>> Req;
+            std::vector<std::pair<int, double>> Req;
             while (!buckets[i].empty())
             {
                 Req = findRequests(buckets[i], true);
@@ -117,9 +194,9 @@ public:
     // kind values:
     // 0 - heavy edges
     // 1 - light edges
-    std::vector<std::pair<int, int>> findRequests(std::unordered_set<int> vertices, bool kind)
+    std::vector<std::pair<int, double>> findRequests(std::unordered_set<int> vertices, bool kind)
     {
-        std::vector<std::pair<int, int>> reqs;
+        std::vector<std::pair<int, double>> reqs;
 
         for (auto vertex : vertices)
         {
@@ -134,7 +211,7 @@ public:
         return reqs;
     }
 
-    void relaxRequests(std::vector<std::pair<int, int>> reqs)
+    void relaxRequests(std::vector<std::pair<int, double>> reqs)
     {
         for (auto req : reqs)
         {
@@ -142,7 +219,7 @@ public:
         }
     }
 
-    void relax(int vertex, int distance)
+    void relax(int vertex, double distance)
     {
         if (distance < tent[vertex])
         {
@@ -157,8 +234,8 @@ public:
 
 struct customCompare
 {
-    bool operator()(const std::pair<int, int> &a,
-                    const std::pair<int, int> &b) const
+    bool operator()(const std::pair<int, double> &a,
+                    const std::pair<int, double> &b) const
     {
         return a.second > b.second;
     }
@@ -168,7 +245,7 @@ class Dijkstra
 {
 public:
     Graph graph;
-    std::vector<int> tent;
+    std::vector<double> tent;
     std::vector<bool> visited;
 
     Dijkstra(Graph graph)
@@ -182,12 +259,12 @@ public:
 
     void findShortest(int source)
     {
-        std::priority_queue<std::pair<int, int>, std::vector<std::pair<int, int>>, customCompare> pq;
+        std::priority_queue<std::pair<int, double>, std::vector<std::pair<int, double>>, customCompare> pq;
         pq.push(std::make_pair(source, 0));
 
         while (!pq.empty())
         {
-            std::pair<int, int> v = pq.top();
+            std::pair<int, double> v = pq.top();
             pq.pop();
 
             // already optimised
@@ -210,11 +287,10 @@ public:
     }
 };
 
-
 class DeltaSteppingParallelStatic
 {
 public:
-    int delta;
+    double delta;
     int num_threads;
     Graph graph;
     std::vector<double> tent;
@@ -410,9 +486,10 @@ public:
 
         //start loops
         int index;
+        std::vector<std::thread> workers(num_threads);
         while(!BucketsEmpty(index)){
             //std::cout << "entering nonempty bucket " << index << std::endl;
-            std::vector<std::thread> workers(num_threads);
+            //std::vector<std::thread> workers(num_threads);
 
             while(!BucketEmpty(index)){
 
@@ -445,24 +522,59 @@ public:
 };
 
 
-int main()
-{
-    Graph G;
-    G.parse_graph("graphs/rome.gr");
-
-    DeltaSteppingSequential alg1(G, 2);
-    Dijkstra alg2(G);
-    DeltaSteppingParallelStatic alg3(G, 3, 10);
-
-
-    alg1.findShortest(0);
-    alg2.findShortest(0);
-    alg3.findShortest(0);
-
-    // do they find the same distance
-    //for (int i = 0; i < G.n; i++)
-    //    std::cout << alg1.tent[i] - alg2.tent[i] << std::endl;
+int main(int argc, char** argv) {
     
-    for (int i = 0; i < G.n; i++)
-        std::cout << alg2.tent[i] - alg3.tent[i] << std::endl;
+    std::vector<int> x = AlgL(20, 10);
+    for(auto xs : x)
+        std::cout << xs << " ";
+    /*
+    if(argc < 4) {
+        std::cerr << "Usage: " << argv[0] << " threads delta option\n";
+        return 1;
+    }
+    int threads = std::stoi(argv[1]);
+    int delta   = std::stoi(argv[2]);
+    int option  = std::stoi(argv[3]);
+
+    Graph G;
+    G.parse_graph("graphs/USA-road-d.BAY.gr");
+
+    if(option == 0){
+        Dijkstra alg(G);
+        auto start = std::chrono::steady_clock::now();
+        alg.findShortest(0);
+        auto finish = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count();
+        std::cout << elapsed << '\n';
+    }
+    else if(option == 1){
+        DeltaSteppingSequential alg(G, delta);
+        auto start = std::chrono::steady_clock::now();
+        alg.findShortest(0);
+        auto finish = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count();
+        std::cout << elapsed << '\n';
+    }
+    else{
+        DeltaSteppingParallelStatic alg(G, delta, threads);
+        auto start = std::chrono::steady_clock::now();
+        alg.findShortest(0);
+        auto finish = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count();
+        std::cout << elapsed << '\n';
+        }
+
+    return 0;
+    */
+    /*
+    Graph G = randomGraph(10, 20);
+    for(int i = 0; i < G.n; i++){
+        std::cout << i << ": ";
+        for(auto v : G.adj_lists[i]){
+            std::cout << "(" << v.first << "," << v.second << ")" << " ";
+        }
+        std::cout << std::endl;
+    }
+    */
+    
 }

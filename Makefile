@@ -18,7 +18,7 @@ all: $(EXEC)
 # Link the object files to create the executable
 $(EXEC): $(OBJECTS)
 	$(CXX)  $(OBJECTS) -o $(EXEC)
-
+cd 
 # Clean up build files
 clean:
 	rm -f $(OBJECTS) $(EXEC)
