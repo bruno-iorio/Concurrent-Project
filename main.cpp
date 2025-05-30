@@ -108,7 +108,6 @@ Graph randomGraph(int n, int m){
     Graph G;
     G.n = n;
     G.maxDist = 1e8;
-    
     for (int i = 0; i < n; ++i) {
         std::vector<std::pair<int, double>> V;
         G.adj_lists.push_back(V);
@@ -123,40 +122,62 @@ Graph randomGraph(int n, int m){
         int j = e - i*(i-1)/2;
         std::pair<int,double> p1 = {j,U(gen)};
         std::pair<int,double> p2 = {i,U(gen)};
-        std::cerr << e << '\n';
-        std::cerr << i << " " <<  G.adj_lists.size() << '\n';
-        std::cerr << j << " " << G.adj_lists.size() << '\n';
-        G.adj_lists[i].push_back(p1);
-        G.adj_lists[j].push_back(p2);
     }
 
     return G;
 }
 
-/*
-Graph RMAT1{
+Graph RMAT1(int n, int m){
+  double pa = 0.45;
+  double pb = 0.22;
+  double pc = 0.22;
+  
+  Graph G;
+  G.n = n;
+  G.maxDist = 1e8;
+  std::vector<int> done;
 
+  for (int i = 0; i < n; ++i) {
+    std::vector<std::pair<int, double>> V;
+    G.adj_lists.push_back(V);
+  }
 
-
-
-
-
-};
-
-
-
-Graph Grid{
-
-
-
-
-
-};
-
-*/
-
-
-
+  std::random_device rd;
+  std::mt19937_64 gen(rd());
+  std::uniform_real_distribution<double> U(0.0, 1.0);
+  int k = 0;
+  while(k < m){
+    int col = 0, row = 0;
+    int size = n/2;
+    while (size > 0){
+      double p = U(gen);
+      if (p < pa){ //upper-left quadrant
+          continue;
+      }
+      else if (p < pa + pb){
+        col += size;
+      }
+      else if (p < pa + pb + pc){
+        row += size;
+      }
+      else{
+        col += size;
+        row += size;
+      }
+      size = size/2;
+    }
+    int i = std::max(col, row);
+    int j = std::min(col,row);
+    int e = i*(i+1)/2 + j;
+    if(i != j && !binary_search(done.begin(),done.end(),e)){
+      k++;
+      G.adj_lists[i].push_back(std::make_pair(j, U(gen)));
+      G.adj_lists[j].push_back(std::make_pair(i, U(gen)));
+      done.insert(std::lower_bound(done.begin(),done.end(),e),e);
+    }
+  }
+  return G;
+}
 
 
 
@@ -546,21 +567,19 @@ public:
 
 
 int main(int argc, char** argv) {
-    /*
-    std::vector<int> x = AlgL(20, 10);
-    for(auto xs : x)
-        std::cout << xs << " ";
     if(argc < 4) {
         std::cerr << "Usage: " << argv[0] << " threads delta option\n";
         return 1;
     }
-    int threads = std::stoi(argv[1]);
-    int delta   = std::stoi(argv[2]);
-    int option  = std::stoi(argv[3]);
+    int    threads = std::stoi(argv[1]);
+    double delta   = std::stoi(argv[2]);
+    int    option  = std::stoi(argv[3]);
+
+    int n = 2 << 20;
+    int m = 128*n;
 
     Graph G;
-    G.parse_graph("graphs/USA-road-d.BAY.gr");
-
+    G =randomGraph(n,m);
     if(option == 0){
         Dijkstra alg(G);
         auto start = std::chrono::steady_clock::now();
@@ -585,10 +604,8 @@ int main(int argc, char** argv) {
         auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count();
         std::cout << elapsed << '\n';
         }
-
-    
-    */
-    Graph G = randomGraph(10, 20);
+  /*
+    Graph G = randomGraph(2<<21, 128);
     for(int i = 0; i < G.n; i++){
         std::cerr << i << ": ";
         for(auto v : G.adj_lists[i]){
@@ -596,5 +613,7 @@ int main(int argc, char** argv) {
         }
         std::cout << std::endl;
     }
+    */
     return 0;
+
 }
