@@ -1,4 +1,4 @@
-CXX = g++-14                             # C++ compiler
+CXX = g++                             # C++ compiler
 CXXFLAGS = -fopenmp -O3                  # Compiler flags
 INCLUDES = -I.                           # Include current directory for .hpp files
 
@@ -18,7 +18,6 @@ all: $(EXEC)
 # Link the object files to create the executable
 $(EXEC): $(OBJECTS)
 	$(CXX)  $(OBJECTS) -o $(EXEC)
-cd 
 # Clean up build files
 clean:
 	rm -f $(OBJECTS) $(EXEC)

@@ -75,7 +75,6 @@ int Graph::maxDeg(){
 //algorithm L for sampling m values with no repetition from 1 to n.
 // Sample m distinct integers from [1..n], returned in res (size m)
 std::vector<int> AlgL(int n, int m) {
-    std::cout << n << "  " << m << std::endl;
     std::random_device rd;
     std::mt19937_64 gen(rd());
 
@@ -114,28 +113,52 @@ Graph randomGraph(int n, int m){
         std::vector<std::pair<int, double>> V;
         G.adj_lists.push_back(V);
     }
-
-    std::cout << "kuurwa" << std::endl;
     std::vector<int> edges = AlgL(n * (n - 1) / 2 , m);
-    for(auto e : edges){
-        std::cout << e << " ";
-    }
-
     std::random_device rd;
     std::mt19937_64 gen(rd());
     std::uniform_real_distribution<double> U(0.0, 1.0);
     
     for(auto e : edges){
-        int u = std::floor((1. + std::sqrt(1 + 8 * double(e))) / 2.);
-        int v = e + u * (3 - u) / 2;
-        u -= 1;
-        v -= 1;
-        G.adj_lists[u].push_back(std::make_pair(v, U(gen)));
-        G.adj_lists[v].push_back(std::make_pair(u, U(gen)));
+        int i = (1 + std::sqrt(1 + 8*e))/2;
+        int j = e - i*(i-1)/2;
+        std::pair<int,double> p1 = {j,U(gen)};
+        std::pair<int,double> p2 = {i,U(gen)};
+        std::cerr << e << '\n';
+        std::cerr << i << " " <<  G.adj_lists.size() << '\n';
+        std::cerr << j << " " << G.adj_lists.size() << '\n';
+        G.adj_lists[i].push_back(p1);
+        G.adj_lists[j].push_back(p2);
     }
 
     return G;
 }
+
+/*
+Graph RMAT1{
+
+
+
+
+
+
+};
+
+
+
+Graph Grid{
+
+
+
+
+
+};
+
+*/
+
+
+
+
+
 
 class DeltaSteppingSequential
 {
@@ -527,7 +550,6 @@ int main(int argc, char** argv) {
     std::vector<int> x = AlgL(20, 10);
     for(auto xs : x)
         std::cout << xs << " ";
-    */
     if(argc < 4) {
         std::cerr << "Usage: " << argv[0] << " threads delta option\n";
         return 1;
@@ -564,17 +586,15 @@ int main(int argc, char** argv) {
         std::cout << elapsed << '\n';
         }
 
-    return 0;
     
-    /*
+    */
     Graph G = randomGraph(10, 20);
     for(int i = 0; i < G.n; i++){
-        std::cout << i << ": ";
+        std::cerr << i << ": ";
         for(auto v : G.adj_lists[i]){
-            std::cout << "(" << v.first << "," << v.second << ")" << " ";
+            std::cerr << "(" << v.first << "," << v.second << ")" << " ";
         }
         std::cout << std::endl;
     }
-    */
-    
+    return 0;
 }
