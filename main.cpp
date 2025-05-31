@@ -567,19 +567,29 @@ public:
 
 
 int main(int argc, char** argv) {
-    if(argc < 4) {
+    if(argc != 5) {
         std::cerr << "Usage: " << argv[0] << " threads delta option\n";
         return 1;
     }
-    int    threads = std::stoi(argv[1]);
-    double delta   = std::stoi(argv[2]);
-    int    option  = std::stoi(argv[3]);
-
-    int n = 2 << 20;
-    int m = 128*n;
-
+    int      threads = std::stoi(argv[1]);
+    double   delta   = std::stoi(argv[2]);
+    int      option  = std::stoi(argv[3]);
+    int option_graph = std::stoi(argv[4]);
+    
+    //
+    int n = 2 << 18;
+    int c = 128;
+    int m = c*n;
     Graph G;
-    G =randomGraph(n,m);
+
+
+    if (option_graph == 0){
+      G =randomGraph(n,m);
+    }
+    if (option_graph == 1){
+      G = RMAT1(n,m);
+    }
+
     if(option == 0){
         Dijkstra alg(G);
         auto start = std::chrono::steady_clock::now();
@@ -588,6 +598,7 @@ int main(int argc, char** argv) {
         auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count();
         std::cout << elapsed << '\n';
     }
+
     else if(option == 1){
         DeltaSteppingSequential alg(G, delta);
         auto start = std::chrono::steady_clock::now();
@@ -596,6 +607,7 @@ int main(int argc, char** argv) {
         auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count();
         std::cout << elapsed << '\n';
     }
+
     else{
         DeltaSteppingParallelStatic alg(G, delta, threads);
         auto start = std::chrono::steady_clock::now();
@@ -603,17 +615,6 @@ int main(int argc, char** argv) {
         auto finish = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count();
         std::cout << elapsed << '\n';
-        }
-  /*
-    Graph G = randomGraph(2<<21, 128);
-    for(int i = 0; i < G.n; i++){
-        std::cerr << i << ": ";
-        for(auto v : G.adj_lists[i]){
-            std::cerr << "(" << v.first << "," << v.second << ")" << " ";
-        }
-        std::cout << std::endl;
     }
-    */
     return 0;
-
 }
