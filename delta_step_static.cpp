@@ -12,12 +12,12 @@
 class DeltaSteppingSequential
 {
 public:
-    int delta;
+    double delta;
     Graph graph;
     std::vector<int> tent;
     std::vector<std::unordered_set<int>> buckets;
 
-    DeltaSteppingSequential(Graph graph, int delta)
+    DeltaSteppingSequential(Graph graph, double delta)
     {
         this->graph = graph;
         this->delta = delta;
@@ -97,8 +97,8 @@ public:
         {
             // remove only if we are sure it is in a bucket
             if (tent[vertex] != 2e9)
-                buckets[tent[vertex] / delta].erase(vertex);
-            buckets[distance / delta].insert(vertex);
+                buckets[(int) (tent[vertex] / delta)].erase(vertex);
+            buckets[(int) (distance / delta)].insert(vertex);
             tent[vertex] = distance;
         }
     }
@@ -124,7 +124,7 @@ public:
         num_threads(num_threads),
         tent(graph.n, 2e9),
         buckets(
-          graph.maxDist / delta + 1,
+          (int)(graph.maxDist / delta) + 1,
           std::vector<std::unordered_set<int>>(num_threads)
         ),
         owner(graph.n, 0),

@@ -53,7 +53,7 @@ public:
             return;             
 
         if (tent[v] != 2e9) 
-            buckets[tent[v] / delta].erase(v);
+            buckets[(int)(tent[v] / delta)].erase(v);
 
         tent[v] = d;
         int idx = tent[v] / delta;
