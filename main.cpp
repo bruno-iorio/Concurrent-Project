@@ -16,18 +16,21 @@
 #include "dijkstra.cpp"
 
 int main(int argc, char** argv) {
-    if(argc != 6) {
-        std::cerr << "Usage: " << argv[0] << " threads delta option option_graph average\n";
+    if(argc != 7) {
+        std::cout << "Usage: " << argv[0] << " threads delta option option_graph average density\n";
         return 1;
     }
     int      threads = std::stoi(argv[1]);
-    double   delta   = std::stoi(argv[2]);
+    double   delta   = std::stod(argv[2]);
     int      option  = std::stoi(argv[3]);
     int option_graph = std::stoi(argv[4]);
     int      average = std::stoi(argv[5]);
-    int n = 1 << 21;
-    int c = 16;
+    int            c = std::stoi(argv[6]);
+    
+    std::cout << delta ;
+    int n = 1 << 6;
     int m = c*n;
+    
     std::vector<Graph> G(average);
     std::vector<std::thread> workers(average);
     
@@ -46,9 +49,7 @@ int main(int argc, char** argv) {
     for(int i = 0; i != average; i++){
       workers[i].join();
     }
-    
     int64_t total_time = 0;
-    
     for(int i=0; i!= average; i++){
       if(option == 0){
           Dijkstra alg(G[i]);

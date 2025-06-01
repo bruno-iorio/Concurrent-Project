@@ -92,7 +92,6 @@ void Graph::parse_graph(const std::string &filename)
 
 void randomGraph(int n, int m, Graph& G){
     G.n = n;
-    G.maxDist = 1e8;
     for (int i = 0; i < n; ++i) {
         std::vector<std::pair<int, double>> V;
         G.adj_lists.push_back(V);
@@ -101,12 +100,14 @@ void randomGraph(int n, int m, Graph& G){
     std::random_device rd;
     std::mt19937_64 gen(rd());
     std::uniform_real_distribution<double> U(0.0, 1.0);
-    
     for(auto e : edges){
         long long i = (1 + std::sqrt(1 + 8*e))/2;
         long long j = e - i*(i-1)/2;
         std::pair<int,double> p1 = {(int)j,U(gen)};
         std::pair<int,double> p2 = {(int)i,U(gen)};
+        G.adj_lists[i].push_back(p1);
+        G.adj_lists[j].push_back(p2);
+        G.maxDist += std::max(p1.second,p2.second);
     }
 }
 

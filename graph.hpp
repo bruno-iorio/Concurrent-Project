@@ -9,7 +9,7 @@
 class Graph {
 public:
     int n = 0;                                           
-    int maxDist = 2e9;                                            
+    int maxDist = 0;                                            
     std::vector<std::vector<std::pair<int,double>>> adj_lists;     
 
     void parse_graph(const std::string& filename);            

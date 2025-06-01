@@ -7,6 +7,7 @@
 #include <thread>
 #include <random>
 #include <algorithm>
+#include <iostream>
 #include <queue>
 
 
@@ -19,7 +20,6 @@ public:
 
         int nBuckets = graph.maxDist / delta + 1;
         buckets.resize(nBuckets);
-
         tent.assign(graph.n, 2e9);         
     }
 
@@ -48,20 +48,18 @@ public:
 
 
     void relax(int v, int d) {
-
         if (d >= tent[v]) 
             return;             
 
         if (tent[v] != 2e9) 
-            buckets[(int)(tent[v] / delta)].erase(v);
+            buckets[(size_t)(tent[v] / delta)].erase(v);
 
         tent[v] = d;
-        int idx = tent[v] / delta;
+        int idx = (int)(tent[v] / delta);
         ensureBucket(idx);
         if (buckets[idx].empty()) 
             active.push(idx); 
         buckets[idx].insert(v);
-
     }
 
     std::vector<std::pair<int, int>> findRequests(std::unordered_set<int> vertices, bool kind)
@@ -89,11 +87,11 @@ public:
 
     void findShortest(int s) {
 
+	std::cerr << "asdasd";
         relax(s,0);
         int i;
 
         while (!nextBucket(i)) {
-
             std::unordered_set<int>  R;
             std::vector<std::pair<int,int>> Req;
 

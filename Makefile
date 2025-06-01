@@ -1,5 +1,5 @@
 CXX = g++                                # C++ compiler
-CXXFLAGS = -fopenmp -O3                  # Compiler flags
+CXXFLAGS = -std=c++20 -fopenmp -O3                  # Compiler flags
 
 # Source and object files
 SOURCES = main.cpp delta_step_dynamic.cpp delta_step_static.cpp dijkstra.cpp graph.cpp
