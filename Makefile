@@ -1,5 +1,5 @@
-CXX = g++                             # C++ compiler
-CXXFLAGS = -fopenmp -O3                  # Compiler flags
+CXX = g++-14                      # C++ compiler
+CXXFLAGS += -std=c++20 -pthread -O2	         # Compiler flags
 INCLUDES = -I.                           # Include current directory for .hpp files
 
 # Source and object files
