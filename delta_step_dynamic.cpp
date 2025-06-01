@@ -12,12 +12,12 @@
 #include <barrier>
 #include <iostream>
 
-
+/*
 class DeltaSteppingSequentialDynamic {
 
     const int INF = 2e8;
     const Graph &G;
-    int delta;
+    double delta;
     const int delta_max;
     std::vector<int> tent;
     std::vector<std::unordered_set<int>> buckets;
@@ -131,6 +131,7 @@ public:
         }
     }
 };
+*/
 
 
 class DeltaSteppingParallelDynamic {
@@ -340,12 +341,12 @@ public:
                 break;
             }
             phase_barrier.arrive_and_wait();       
-        }ś
+        }
     }
 
 public:
     DeltaSteppingParallelDynamic(const Graph& g,int d,int threads, int light_threshold = 60, int max_rebuilds = 5)
-        : G(g), delta(d), T(threads), delta_max(std::max(1, g.maxDist/8)),
+        : G(g), delta(d), T(threads), delta_max(std::max(1., g.maxDist/8)),
           delta_update(light_threshold), MAX_REBUILDS(max_rebuilds),
           tent(g.n,INF), inBucket(g.n,0),
           buckets(1,std::vector<std::vector<int>>(threads)),

@@ -9,6 +9,12 @@
 #include <algorithm>
 #include <queue>
 
+struct customCompare {
+    bool operator()(const std::pair<int,int>& a,
+                    const std::pair<int,int>& b) const noexcept {
+        return a.second > b.second;                             
+    }
+};
 
 class Dijkstra 
 {

@@ -1,5 +1,3 @@
-#ifndef GRAPH_HPP
-#define GRAPH_HPP
 #pragma once
 
 #include <vector>
@@ -8,19 +6,17 @@
 
 class Graph {
 public:
-    int n = 0;                                           
-    int maxDist = 2e9;                                            
-    std::vector<std::vector<std::pair<int,int>>> adj_lists;     
+    int n;                                           
+    double maxDist;                                            
+    std::vector<std::vector<std::pair<int,double>>> adj_lists;     
 
-    void parse_graph(const std::string& filename);            
+    Graph() {};
+    void parse_graph(const std::string& filename);      
+    int maxDeg();
 };
 
-struct customCompare {
-    bool operator()(const std::pair<int,int>& a,
-                    const std::pair<int,int>& b) const noexcept {
-        return a.second > b.second;                             
-    }
-};
-
-
-#endif  
+std::vector<int> AlgL(int n, int m);
+void randomGraph(int n, int m, Graph& G);
+std::vector<int> merge(std::vector<int> sorted, std::vector<int> vec,int m);
+void RMAT1loop(int n, int m, std::vector<long long>& to_add);
+void RMAT1(int n, int m, Graph& G);
