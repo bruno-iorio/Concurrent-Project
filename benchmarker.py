@@ -63,20 +63,22 @@ if (test_density):
     print("done")
 elif (option == 3):
     for threads in threads_list:
-        for delta in delta_list3:
+        for delta in delta_list3: # because this is integer
             for light in light_list:
                 for rebuilds in rebuilds_list:
                     print("starting for", threads, " ", delta)
                     cmd = [binary, str(threads), str(delta), str(option), str(option_graph),str(avg),str(default_density),str(light),str(rebuilds)]
                     avg_time = float(subprocess.check_output(cmd, text=True))/avg
+
                     results.append({
-                        'threads': threads,
-                        'delta': delta,
+                        'threads':   threads,
+                        'delta':     delta,
                         'rebuilds' : rebuilds,
-                        'light' : light,
-                        'time_es' : avg_time
+                        'light' :    light,
+                        'time_es' :  avg_time
 
                     })
+
                     print("done for ", threads, " ", delta)
 
 elif (option == 4):

@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
     int        light = std::stoi(argv[6]);
     int     rebuilds = std::stoi(argv[6]);
     
-    int n = 1 << 3;
+    int n = 1 << 17;
     int m = c * n;
 
     std::vector<Graph> G(average);
@@ -84,7 +84,7 @@ int main(int argc, char** argv) {
       }
       
       else if(option == 3){
-          DeltaSteppingParallelDynamic alg(G[i], (int) delta, threads);
+          DeltaSteppingParallelDynamic alg(G[i], (int) delta, threads, light, rebuilds);
           auto start = std::chrono::steady_clock::now();
           alg.findShortest(0);
           auto finish = std::chrono::steady_clock::now();
