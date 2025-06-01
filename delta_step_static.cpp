@@ -34,7 +34,7 @@ public:
     {
         this->graph = graph;
         this->delta = delta;
-        int n_buckets = graph.maxDist / delta + 1;
+        int n_buckets = (int)(graph.maxDist / delta) + 1;
         this->buckets = std::vector<std::unordered_set<int>>(n_buckets);
         this->tent.resize(graph.n);
         std::fill(tent.begin(), tent.end(), 2e9);
@@ -117,8 +117,7 @@ public:
     }
 };
 
-class DeltaSteppingParallelStatic
-{
+class DeltaSteppingParallelStatic{
 public:
     double delta;
     int num_threads;
@@ -134,7 +133,7 @@ public:
                                                                                      num_threads(num_threads),
                                                                                      tent(graph.n, 2e9),
                                                                                      buckets(
-                                                                                         graph.maxDist / delta + 1,
+                                                                                         (int)(graph.maxDist / delta) + 1,
                                                                                          std::vector<std::unordered_set<int>>(num_threads)),
                                                                                      owner(graph.n, 0),
                                                                                      NeighborsLight(graph.n),
@@ -241,13 +240,14 @@ public:
                     int vertex = request.first;
                     double propDist = request.second;
                     if (propDist < tent[vertex])
-                    {
+                    {   
+                        double olddist = tent[vertex];
+                        int oldbucket_ind = (int)(tent[vertex] / delta);
                         tent[vertex] = propDist;
-                        int i = int(tent[vertex] / delta);
-                        int j = int(propDist / delta);
-                        if (tent[vertex] != 2e9)
-                            buckets[i][to_thread].erase(vertex);
-                        buckets[j][to_thread].insert(vertex);
+                        int newbucket_ind = (int)(propDist / delta);
+                        if (olddist < 2e9)
+                            buckets[oldbucket_ind][to_thread].erase(vertex);
+                        buckets[newbucket_ind][to_thread].insert(vertex);
                     }
                 }
             }
@@ -261,23 +261,23 @@ public:
                     int vertex = request.first;
                     double propDist = request.second;
                     if (propDist < tent[vertex])
-                    {
+                    {   
+                        double olddist = tent[vertex];
+                        int oldbucket_ind = int(tent[vertex] / delta);
                         tent[vertex] = propDist;
-                        double i = tent[vertex] / delta;
-                        double j = propDist / delta;
-                        if (tent[vertex] != 2e9)
-                            buckets[i][to_thread].erase(vertex);
-                        buckets[j][to_thread].insert(vertex);
-                        atomic_fetch_min(next_nonempty, j, std::memory_order_relaxed);
+                        int newbucket_ind = int(propDist / delta);
+                        if (olddist < 2e9)
+                            buckets[oldbucket_ind][to_thread].erase(vertex);
+                        buckets[newbucket_ind][to_thread].insert(vertex);
                     }
                 }
             }
         }
     }
 
-    bool BucketsEmpty(int &non_empty_index)
+    bool BucketsEmpty(int &non_empty_index, int prev_index)
     {
-        for (int i = 0; i != buckets.size(); i++)
+        for (int i = prev_index + 1; i != buckets.size(); i++)
         {
             for (int j = 0; j != buckets[i].size(); j++)
             {
@@ -312,7 +312,6 @@ private:
         TERMINATE
     };
 
-    std::atomic<int> next_nonempty = INT_MAX;
     std::atomic<Phase> phase = Phase::RUN_LOOP1;
     std::atomic<int> current_bucket = 0;
     //either do some weird cast or intialise with brackets like this
@@ -363,18 +362,17 @@ public:
         assignThreads();
 
         buckets[0][owner[source]].insert(source);
-        next_nonempty.store(0);
         tent[source] = 0;
 
         std::vector<std::thread> workers(num_threads);
         for (int t = 0; t < num_threads; ++t)
             workers[t] = std::thread(&DeltaSteppingParallelStatic::worker, this, t);
 
+        int prev_index = -1;
         int index;
-        while (next_nonempty.load() != INT_MAX)
+        while (!BucketsEmpty(index, prev_index))
         {   
-            index = next_nonempty.load();
-            next_nonempty.store(INT_MAX);
+            prev_index = index;
             while (!BucketEmpty(index))
             {
                 do_phase(Phase::RUN_LOOP1, index); // 1st loop

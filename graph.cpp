@@ -18,21 +18,21 @@
 #include "graph.hpp"
 
 
-std::vector<long long> AlgL(int n, int m) {
+std::vector<int> AlgL(int n, int m) {
     std::random_device rd;
     std::mt19937_64 gen(rd());
 
     std::uniform_real_distribution<double> U(0.0, 1.0);
-    std::uniform_int_distribution<long long> R(0, m-1);
+    std::uniform_int_distribution<int> R(0, m-1);
 
-    std::vector<long long> res(m);
+    std::vector<int> res(m);
 
     double W = std::exp(std::log(U(gen)) / m);
 
     int i = m;
     while (true) {
         double u = U(gen);
-        long long s = (long long)(std::floor(std::log(u) / std::log(1.0 - W))) + 1;
+        int s = (std::floor(std::log(u) / std::log(1.0 - W))) + 1;
         i += s;
         if (i > n) break;
 
@@ -96,18 +96,19 @@ void randomGraph(int n, int m, Graph& G){
         std::vector<std::pair<int, double>> V;
         G.adj_lists.push_back(V);
     }
-    std::vector<long long> edges = AlgL(n * (n - 1) / 2 , m);
+    std::vector<int> edges = AlgL(n * (n - 1) / 2 , m);
     std::random_device rd;
     std::mt19937_64 gen(rd());
     std::uniform_real_distribution<double> U(0.0, 1.0);
     for(auto e : edges){
-        long long i = (1 + std::sqrt(1 + 8*e))/2;
-        long long j = e - i*(i-1)/2;
-        std::pair<int,double> p1 = {(int)j,U(gen)};
-        std::pair<int,double> p2 = {(int)i,U(gen)};
+        int i = std::floor((1 + std::sqrt(1 + 8*e)) / 2) ;
+        int j = e - i*(i-1)/2;
+        i--;
+        std::pair<int,double> p1 = std::make_pair(j,U(gen));
+        std::pair<int,double> p2 = std::make_pair(i,U(gen));
         G.adj_lists[i].push_back(p1);
         G.adj_lists[j].push_back(p2);
-        G.maxDist += std::max(p1.second,p2.second);
+        G.maxDist += p1.second + p2.second;
     }
 }
 
