@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <atomic>
 #include <barrier>
+#include <iostream>
 
 
 class DeltaSteppingSequentialDynamic {
@@ -122,7 +123,7 @@ public:
             cntHeavy = reqH.size();
             relaxReq(reqH);
 
-            if (lightRounds > 10 && delta < delta_max) {
+            if (lightRounds > 20 && delta < delta_max) {
             delta *= 2;
             rebuild_buckets();
         }
@@ -134,7 +135,9 @@ public:
 
 class DeltaSteppingParallelDynamic {
     const int INF = 2e9;
-    const int MAX_REBUILDS = 20;
+    const int MAX_REBUILDS;
+    const int delta_update;
+
 
     enum Phase {IDLE, GEN_REQ_LIGHT, RELAX_LIGHT, RELAX_HEAVY, EXIT};
 
@@ -340,8 +343,9 @@ class DeltaSteppingParallelDynamic {
     }
 
 public:
-    DeltaSteppingParallelDynamic(const Graph& g,int d,int threads)
+    DeltaSteppingParallelDynamic(const Graph& g,int d,int threads, int light_threshold = 60, int max_rebuilds = 5)
         : G(g), delta(d), T(threads), delta_max(std::max(1, g.maxDist/8)),
+          delta_update(light_threshold), MAX_REBUILDS(max_rebuilds),
           tent(g.n,INF), inBucket(g.n,0),
           buckets(1,std::vector<std::vector<int>>(threads)),
           reqL(threads,std::vector<std::vector<std::pair<int,int>>>(threads)),
@@ -386,7 +390,7 @@ public:
             phase_barrier.arrive_and_wait();
 
             // number of lightRounds we want before delta changes is dependant on graph size
-            if (lightRounds > 30 && delta < delta_max && rebuild_cnt < MAX_REBUILDS) {
+            if (lightRounds > delta_update && delta < delta_max && rebuild_cnt < MAX_REBUILDS) {
                 rebuild_all_for_new_delta(delta * 2);
                 ++rebuild_cnt;
             }
