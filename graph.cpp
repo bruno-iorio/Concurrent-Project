@@ -56,7 +56,6 @@ void Graph::parse_graph(const std::string &filename)
     }
 }
 
-
 int Graph::maxDeg()
 {
     int max_deg = 0;

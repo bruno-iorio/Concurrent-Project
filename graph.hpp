@@ -3,6 +3,7 @@
 #include <vector>
 #include <utility>   
 #include <string>
+#include <iostream>
 
 class Graph {
 public:
@@ -13,6 +14,23 @@ public:
     Graph() {};
     void parse_graph(const std::string& filename);      
     int maxDeg();
+    void print(std::ostream& os = std::cout) const
+    {
+        os << "Graph: " << n << " vertices \n ";
+
+        for (int u = 0; u < n; ++u)
+        {
+            os << u << ": ";
+            bool first = true;
+            for (const auto& [v, w] : adj_lists[u])
+            {
+                if (!first) os << ", ";
+                first = false;
+                os << v << '(' << w << ')';
+            }
+            os << '\n';
+        }
+    }
 };
 
 std::vector<int> AlgL(int n, int m);
