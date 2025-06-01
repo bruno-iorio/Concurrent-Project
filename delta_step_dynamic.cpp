@@ -134,6 +134,7 @@ public:
 
 
 class DeltaSteppingParallelDynamic {
+public:
     const int INF = 2e9;
     const int MAX_REBUILDS;
     const int delta_update;
@@ -339,7 +340,7 @@ class DeltaSteppingParallelDynamic {
                 break;
             }
             phase_barrier.arrive_and_wait();       
-        }
+        }ś
     }
 
 public:
@@ -389,8 +390,7 @@ public:
             startPhase(RELAX_HEAVY);
             phase_barrier.arrive_and_wait();
 
-            // number of lightRounds we want before delta changes is dependant on graph size
-            if (lightRounds > delta_update && delta < delta_max && rebuild_cnt < MAX_REBUILDS) {
+            if (lightRounds > delta_update && delta < 2 * delta_max && rebuild_cnt < MAX_REBUILDS) {
                 rebuild_all_for_new_delta(delta * 2);
                 ++rebuild_cnt;
             }
