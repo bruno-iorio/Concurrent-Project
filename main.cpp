@@ -16,16 +16,6 @@
 #include <climits>
 
 
-/* generic, lock-free fetch_min for any integral or pointer type */
-inline void atomic_fetch_min(std::atomic<int>& obj,
-                             int               arg,
-                             std::memory_order order = std::memory_order_relaxed)
-{
-    int cur = obj.load(order);
-    while (cur > arg && !obj.compare_exchange_weak(cur, arg, order, order))
-        /* `cur` is updated with the current value on failure */ ;
-}
-
 class Graph
 {
 public:
@@ -126,7 +116,7 @@ Graph randomGraph(int n, int m)
 {
     Graph G;
     G.n = n;
-    G.maxDist = 1e8;
+    G.maxDist = 3000;
     for (int i = 0; i < n; ++i)
     {
         std::vector<std::pair<int, double>> V;
@@ -588,6 +578,7 @@ public:
     }
 };
 
+
 class DeltaSteppingParallelStatic
 {
 public:
@@ -712,13 +703,14 @@ public:
                     int vertex = request.first;
                     double propDist = request.second;
                     if (propDist < tent[vertex])
-                    {
+                    {   
+                        double olddist = tent[vertex];
+                        int oldbucket_ind = int(tent[vertex] / delta);
                         tent[vertex] = propDist;
-                        int i = int(tent[vertex] / delta);
-                        int j = int(propDist / delta);
-                        if (tent[vertex] != 2e9)
-                            buckets[i][to_thread].erase(vertex);
-                        buckets[j][to_thread].insert(vertex);
+                        int newbucket_ind = int(propDist / delta);
+                        if (olddist < 2e9)
+                            buckets[oldbucket_ind][to_thread].erase(vertex);
+                        buckets[newbucket_ind][to_thread].insert(vertex);
                     }
                 }
             }
@@ -732,23 +724,23 @@ public:
                     int vertex = request.first;
                     double propDist = request.second;
                     if (propDist < tent[vertex])
-                    {
+                    {   
+                        double olddist = tent[vertex];
+                        int oldbucket_ind = int(tent[vertex] / delta);
                         tent[vertex] = propDist;
-                        double i = tent[vertex] / delta;
-                        double j = propDist / delta;
-                        if (tent[vertex] != 2e9)
-                            buckets[i][to_thread].erase(vertex);
-                        buckets[j][to_thread].insert(vertex);
-                        atomic_fetch_min(next_nonempty, j, std::memory_order_relaxed);
+                        int newbucket_ind = int(propDist / delta);
+                        if (olddist < 2e9)
+                            buckets[oldbucket_ind][to_thread].erase(vertex);
+                        buckets[newbucket_ind][to_thread].insert(vertex);
                     }
                 }
             }
         }
     }
 
-    bool BucketsEmpty(int &non_empty_index)
+    bool BucketsEmpty(int &non_empty_index, int prev_index)
     {
-        for (int i = 0; i != buckets.size(); i++)
+        for (int i = prev_index + 1; i != buckets.size(); i++)
         {
             for (int j = 0; j != buckets[i].size(); j++)
             {
@@ -783,7 +775,6 @@ private:
         TERMINATE
     };
 
-    std::atomic<int> next_nonempty = INT_MAX;
     std::atomic<Phase> phase = Phase::RUN_LOOP1;
     std::atomic<int> current_bucket = 0;
     //either do some weird cast or intialise with brackets like this
@@ -834,18 +825,17 @@ public:
         assignThreads();
 
         buckets[0][owner[source]].insert(source);
-        next_nonempty.store(0);
         tent[source] = 0;
 
         std::vector<std::thread> workers(num_threads);
         for (int t = 0; t < num_threads; ++t)
             workers[t] = std::thread(&DeltaSteppingParallelStatic::worker, this, t);
 
+        int prev_index = -1;
         int index;
-        while (next_nonempty.load() != INT_MAX)
+        while (!BucketsEmpty(index, prev_index))
         {   
-            index = next_nonempty.load();
-            next_nonempty.store(INT_MAX);
+            prev_index = index;
             while (!BucketEmpty(index))
             {
                 do_phase(Phase::RUN_LOOP1, index); // 1st loop
@@ -873,12 +863,11 @@ int main(int argc, char **argv)
     //int option_graph = std::stoi(argv[4]);
 
     //
-    int n = 2 << 18;
+    int n = 2 << 6;
     int c = 128;
     int m = c * n;
     Graph G;
 
-    G.parse_graph("graphs/USA-road-d.CAL.gr");
 
     /*
     if (option_graph == 0)
@@ -891,10 +880,15 @@ int main(int argc, char **argv)
     }
     if (option_graph == 2)
     {
-        
+        G.parse_graph("graphs/USA-road-d.CAL.gr");
     }
     */
+    
+    G.parse_graph("graphs/USA-road-d.BAY.gr");
 
+    
+
+    
     if (option == 0)
     {
         Dijkstra alg(G);
@@ -922,6 +916,15 @@ int main(int argc, char **argv)
         alg.findShortest(0);
         auto finish = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count();
+        //correctness test against this generic dijkstra //comment for speed
+        Dijkstra alg1(G);
+        alg1.findShortest(0);
+        for(int i = 0; i < G.n ; i++){
+            if(alg.tent[i] != alg1.tent[i]){
+                std::cout << "broken!" << std::endl;
+                break;
+            }
+        }
         std::cout << elapsed << '\n';
     }
     else
@@ -934,4 +937,5 @@ int main(int argc, char **argv)
         std::cout << elapsed << '\n';
     }
     return 0;
+    
 }
