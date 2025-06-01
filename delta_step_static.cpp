@@ -17,25 +17,15 @@
 #include <climits>
 
 
-/* generic, lock-free fetch_min for any integral or pointer type */
-inline void atomic_fetch_min(std::atomic<int>& obj,
-                             int               arg,
-                             std::memory_order order = std::memory_order_relaxed)
-{
-    int cur = obj.load(order);
-    while (cur > arg && !obj.compare_exchange_weak(cur, arg, order, order))
-        /* `cur` is updated with the current value on failure */ ;
-}
-
 class DeltaSteppingSequential
 {
 public:
-    int delta;
+    double delta;
     Graph graph;
-    std::vector<int> tent;
+    std::vector<double> tent;
     std::vector<std::unordered_set<int>> buckets;
 
-    DeltaSteppingSequential(Graph graph, int delta)
+    DeltaSteppingSequential(Graph graph, double delta)
     {
         this->graph = graph;
         this->delta = delta;
@@ -53,7 +43,7 @@ public:
         while (!BucketsEmpty(i))
         {
             std::unordered_set<int> R;
-            std::vector<std::pair<int, int>> Req;
+            std::vector<std::pair<int, double>> Req;
             while (!buckets[i].empty())
             {
                 Req = findRequests(buckets[i], true);
@@ -84,9 +74,9 @@ public:
     // kind values:
     // 0 - heavy edges
     // 1 - light edges
-    std::vector<std::pair<int, int>> findRequests(std::unordered_set<int> vertices, bool kind)
+    std::vector<std::pair<int, double>> findRequests(std::unordered_set<int> vertices, bool kind)
     {
-        std::vector<std::pair<int, int>> reqs;
+        std::vector<std::pair<int, double>> reqs;
 
         for (auto vertex : vertices)
         {
@@ -101,7 +91,7 @@ public:
         return reqs;
     }
 
-    void relaxRequests(std::vector<std::pair<int, int>> reqs)
+    void relaxRequests(std::vector<std::pair<int, double>> reqs)
     {
         for (auto req : reqs)
         {
@@ -109,7 +99,7 @@ public:
         }
     }
 
-    void relax(int vertex, int distance)
+    void relax(int vertex, double distance)
     {
         if (distance < tent[vertex])
         {
@@ -121,6 +111,7 @@ public:
         }
     }
 };
+
 class DeltaSteppingParallelStatic
 {
 public:
