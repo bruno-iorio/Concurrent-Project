@@ -38,3 +38,4 @@ void randomGraph(int n, int m, Graph& G);
 std::vector<int> merge(std::vector<int> sorted, std::vector<int> vec,int m);
 void RMAT1loop(int n, int m, std::vector<long long>& to_add);
 void RMAT1(int n, int m, Graph& G);
+void wideWeightRandomGraph(int n, int m, double min_w, double max_w, Graph& G);

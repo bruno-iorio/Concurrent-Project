@@ -13,6 +13,7 @@
 #include <random>
 #include <algorithm>
 #include <queue>
+#include <set>
 
 #include "graph.hpp"
 
@@ -241,4 +242,26 @@ for(auto it : edges){
 	G.adj_lists[i].push_back(std::make_pair(j, U(gen)));
 	G.adj_lists[j].push_back(std::make_pair(i, U(gen)));
 }
+}
+
+// credit: CHATGPT
+void wideWeightRandomGraph(int n, int m, double min_w, double max_w, Graph& G) {
+    G.n = n;
+    G.adj_lists.assign(n, {});
+    G.maxDist = 0;
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<int> node_dist(0, n-1);
+    std::uniform_real_distribution<double> weight_dist(min_w, max_w);
+    std::set<std::pair<int, double>> edges;
+    while (edges.size() < (size_t)m) {
+        int u = node_dist(gen), v = node_dist(gen);
+        if (u == v) continue;
+        int a = std::min(u, v), b = std::max(u, v);
+        if (!edges.insert({a, b}).second) continue;
+        double w = weight_dist(gen);
+        G.adj_lists[a].emplace_back(b, w);
+        G.adj_lists[b].emplace_back(a, w);
+        G.maxDist += w;
+    }
 }
