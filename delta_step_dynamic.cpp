@@ -1,305 +1,398 @@
+
+#pragma once
 #include "graph.hpp"
 #include <vector>
-#include <unordered_set>
 #include <queue>
-#include <mutex>
-#include <utility>
+#include <unordered_set>
 #include <thread>
+#include <mutex>
 #include <random>
 #include <algorithm>
-#include <queue>
+#include <atomic>
+#include <barrier>
 
 
 class DeltaSteppingSequentialDynamic {
-public:
 
-    DeltaSteppingSequentialDynamic(const Graph& g, int d)
-        : delta(d), graph(g)
-    {
-
-        int nBuckets = graph.maxDist / delta + 1;
-        buckets.resize(nBuckets);
-
-        tent.assign(graph.n, 2e9);         
-    }
-
-    Graph graph;
+    const int INF = 2e8;
+    const Graph &G;
     int delta;
+    const int delta_max;
     std::vector<int> tent;
-    std::vector<std::unordered_set<int>> buckets; // here this grows on demand
-    std::priority_queue<int,
-                        std::vector<int>,
-                        std::greater<int>> active; // min-heap of non-empty idx
+    std::vector<std::unordered_set<int>> buckets;
+    
+    std::priority_queue<int,std::vector<int>,std::greater<int>> active;
 
     void ensureBucket(int idx) {
-        if (idx >= static_cast<int>(buckets.size()))
-            buckets.resize(idx + 1);
+        if (idx >= buckets.size()) 
+            buckets.resize(idx+1); 
     }
 
-    bool nextBucket(int& idx) {                   // O(log k)
-        while (!active.empty()) {
+    bool nextBucket(int &idx) {
+        while (!active.empty()) 
+        {
             idx = active.top();
             if (!buckets[idx].empty()) 
-                return false;
-            active.pop();                         
+                return true;
+            active.pop();
         }
-        return true;                             
+        return false;
+    }
+
+    void rebuild_buckets() {
+
+        std::vector<int> live;
+        for (std::size_t idx = 0; idx < buckets.size(); ++idx)
+            for (int v : buckets[idx]) 
+                live.push_back(v);
+
+        buckets.assign(G.maxDist / delta + 1, {});
+
+        while (!active.empty()) 
+            active.pop();
+
+        for (int v : live) {
+            int idx = tent[v] / delta;
+            if (buckets[idx].empty()) 
+                active.push(idx);
+            buckets[idx].insert(v);
+        }
     }
 
 
-    void relax(int v, int d) {
-
+    void relax(int v,int d) {
         if (d >= tent[v]) 
-            return;             
-
-        if (tent[v] != 2e9) 
-            buckets[tent[v] / delta].erase(v);
-
+            return;
+        if (tent[v] != INF) 
+            buckets[tent[v]/delta].erase(v);
         tent[v] = d;
-        int idx = tent[v] / delta;
+        int idx = d / delta;  
+
         ensureBucket(idx);
+
         if (buckets[idx].empty()) 
-            active.push(idx); 
+            active.push(idx);
+
         buckets[idx].insert(v);
-
     }
 
-    std::vector<std::pair<int, int>> findRequests(std::unordered_set<int> vertices, bool kind)
-    {
-        std::vector<std::pair<int, int>> reqs;
-
-        for (auto vertex : vertices)
-        {
-            for (auto connected_vertex : graph.adj_lists[vertex])
-            {
-                if (kind && connected_vertex.second <= delta)
-                    reqs.push_back(std::make_pair(connected_vertex.first, tent[vertex] + connected_vertex.second));
-                else if (!kind && connected_vertex.second > delta)
-                    reqs.push_back(std::make_pair(connected_vertex.first, tent[vertex] + connected_vertex.second));
-            }
-        }
-        return reqs;
+    std::vector<std::pair<int,int>> genReq(const std::unordered_set<int>& S,bool light) {
+        std::vector<std::pair<int,int>> R;  
+        R.reserve(S.size()*4);
+        for (int u : S)
+            for (auto [v,w] : G.adj_lists[u])
+                if ((light && w<=delta) || (!light && w>delta))
+                    R.emplace_back(v, tent[u]+w);
+        return R;
     }
 
-    void relaxRequests(const std::vector<std::pair<int,int>>& reqs) {
-        for (auto [v,d] : reqs) 
+    void relaxReq(const std::vector<std::pair<int,int>>& R) {
+        for (auto [v,d] : R) 
             relax(v,d);
     }
 
+public:
+    DeltaSteppingSequentialDynamic(const Graph& g,int d)
+        : G(g), delta(d), delta_max(std::max(1, g.maxDist/8)), tent(g.n,INF), buckets(g.maxDist/delta + 1) {}
+
+    const std::vector<int>& distances() {
+        return tent; 
+    }
 
     void findShortest(int s) {
+        relax(s,0); 
+        int idx;
+        while (nextBucket(idx)) {
+            std::unordered_set<int> R;
+            int lightRounds = 0;
+            std::size_t cntLight = 0, cntHeavy = 0;
 
-        relax(s,0);
-        int i;
-
-        while (!nextBucket(i)) {
-
-            std::unordered_set<int>  R;
-            std::vector<std::pair<int,int>> Req;
-
-            while (!buckets[i].empty()) {
-                Req = findRequests(buckets[i], true);
-                R.insert(buckets[i].begin(), buckets[i].end());
-                buckets[i].clear();                
-                relaxRequests(Req);
+            // light edges
+            while (!buckets[idx].empty()) {
+                ++lightRounds;
+                auto reqL = genReq(buckets[idx], true);
+                cntLight += reqL.size();
+                R.insert(buckets[idx].begin(), buckets[idx].end());
+                buckets[idx].clear();
+                relaxReq(reqL);
             }
 
-            Req = findRequests(R, false);
-            relaxRequests(Req);
+            // heavy edges
+            auto reqH = genReq(R, false);
+            cntHeavy = reqH.size();
+            relaxReq(reqH);
+
+            if (lightRounds > 10 && delta < delta_max) {
+            delta *= 2;
+            rebuild_buckets();
+        }
 
         }
     }
 };
 
 
+class DeltaSteppingParallelDynamic {
+    const int INF = 2e9;
+    const int MAX_REBUILDS = 20;
 
+    enum Phase {IDLE, GEN_REQ_LIGHT, RELAX_LIGHT, RELAX_HEAVY, EXIT};
 
-
-class DeltaSteppingParallelDynamic
-{
-public:
-
+    const Graph &G;
     int delta;
-    int num_threads;
-    Graph graph;
-    std::vector<int> tent;                                    
-    std::vector<std::vector<std::unordered_set<int>>> buckets;  
-    std::vector<int> owner;
-    std::vector<std::vector<std::pair<int,double>>> neiLight , neiHeavy;
-    std::vector<std::vector<std::vector<std::pair<int,double>>>> reqL, reqH;
+    const int T;             
+    int rebuild_cnt = 0;         
+    const int delta_max;          
 
-    std::mutex resize_mtx;   
-    std::mutex heap_mtx;     // protects globalActive
-    std::priority_queue<int, std::vector<int>, std::greater<int>> globalActive;        
+    std::vector<int> tent;
+    std::vector<char> inBucket;  // vertex live flag
+    std::vector<int>  owner;  // vertex to thread
 
-    DeltaSteppingParallelDynamic(const Graph& g, double d, int nThreads)
-        : 
-        graph(g),
-        delta(d),
-        num_threads(nThreads),
-        tent(g.n, 2e9),
-        buckets(1, std::vector<std::unordered_set<int>>(nThreads)),
-        owner(g.n, 0),
-        neiLight(g.n), neiHeavy(g.n),
-        reqL(nThreads, std::vector<std::vector<std::pair<int, double>>>(nThreads)),
-        reqH(nThreads, std::vector<std::vector<std::pair<int, double>>>(nThreads))
-    { }
+    std::vector<std::vector<std::vector<int>>> buckets;
+    std::priority_queue<int,std::vector<int>,std::greater<int>> activeHeap;
+    std::mutex heap_mtx, resize_mtx;
 
-    void splitNeighbors()
-    {
-        for (int v = 0; v < graph.n; ++v)
-            for (auto e : graph.adj_lists[v])
-                if(e.second <= delta)
-                    neiLight[v].push_back(e);
-                else
-                    neiHeavy[v].push_back(e);
+    // pre-split neighbor lists to skip weight check 
+    std::vector<std::vector<std::pair<int,int>>> neiLight, neiHeavy;
+    std::vector<std::vector<std::vector<std::pair<int,int>>>> reqL, reqH;
+
+    std::vector<std::thread> pool;
+    std::barrier<> phase_barrier;
+    std::atomic<Phase> phase{IDLE};
+    std::atomic<int> curBucket{0};
+
+    void splitNeighbors() {
+        neiLight.resize(G.n);  
+        neiHeavy.resize(G.n);
+        for (int u = 0; u < G.n; ++u)
+            for (auto [v,w] : G.adj_lists[u])
+        if (w <= delta) 
+            neiLight[u].push_back({v, w});
+        else 
+            neiHeavy[u].push_back({v, w});
     }
 
-    void assignThreads(){
-        int iter = 0;
-        for (int t = 0; t < num_threads; t++) {
-            int count = graph.n / num_threads + (t < (graph.n % num_threads) ? 1 : 0);
-            for (int i = 0; i < count; ++i) {
-                owner[iter++] = t;
-            }
+    void assignThreads() {
+        owner.resize(G.n);
+        int base = G.n / T, extra = G.n % T, idx = 0;
+        for (int t = 0; t < T; ++t) {
+            int cnt = base + (t<extra);
+            for (int i = 0; i < cnt; ++i) 
+                owner[idx++] = t;
         }
+        // shuffle threads to avoid imbalanced loads
+        std::shuffle(owner.begin(), owner.end(), std::mt19937{std::random_device{}()});
+    }
+    void startWorkers() {
+        pool.resize(T);
+        for (int t = 0; t < T; ++t)
+            pool[t] = std::thread(&DeltaSteppingParallelDynamic::worker, this, t);
+    }
+
+
+    void rebuild_all_for_new_delta(int newDelta)
+{
+    delta = newDelta;                                  
+
+    for (int u = 0; u < G.n; ++u) {
+        neiLight[u].clear(); 
+        neiHeavy[u].clear();
+        for (auto [v,w] : G.adj_lists[u])
+            if (w <= delta) 
+                neiLight[u].push_back({v, w});
+            else 
+                neiHeavy[u].push_back({v, w});
+    }
+
+    std::vector<int> live;
+    for (auto &perIdx : buckets)
+        for (auto &vecT : perIdx)
+            live.insert(live.end(), vecT.begin(), vecT.end());
+
+    buckets.assign(G.maxDist/delta + 1, std::vector<std::vector<int>>(T));
+    while (!activeHeap.empty()) 
+        activeHeap.pop();
+
+    for (int v : live) {
+        int tid = owner[v];
+        int idx = tent[v] / delta;
+        auto &vec = buckets[idx][tid];
+        if (vec.empty()) { 
+            std::lock_guard l(heap_mtx); 
+            activeHeap.push(idx); 
+        }
+        vec.push_back(v);
+    }
+}
+
+    void ensureBucket(int idx) {
+        if (idx < (int)buckets.size()) 
+            return;
+        std::lock_guard lg(resize_mtx);
+        if (idx >= (int)buckets.size())
+            buckets.resize(idx+1,std::vector<std::vector<int>>(T));
+    }
+
+    void insertVertex(int tid, int v, int newD, int oldD) {
+        if (oldD != INF) {
+            int oldIdx = oldD / delta;
+            auto &vec = buckets[oldIdx][tid];
+            vec.erase(std::remove(vec.begin(),vec.end(),v), vec.end());
+        }
+        int idx = newD / delta;
+        ensureBucket(idx);
+        auto &vec = buckets[idx][tid];
+        if (vec.empty()) { 
+            std::lock_guard l(heap_mtx); 
+            activeHeap.push(idx); 
+        }
+        vec.push_back(v); 
+        inBucket[v] = 1;
+    }
+    bool bucketEmpty(int idx) const {
+        for (int t = 0; t < T; ++t)
+            if (!buckets[idx][t].empty()) 
+                return false;
+        return true;
+    }
+
+    bool nextBucket(int &idx) {
+        std::lock_guard l(heap_mtx);
+        while (!activeHeap.empty()) {
+            idx = activeHeap.top();
+            if (!bucketEmpty(idx)) 
+                return true;     
+            activeHeap.pop();                      
+        }
+        return false;
+    }
+
+    // generate requests from bucket
+    void loop1(int tid, int idx) {       
+        for (int u : buckets[idx][tid]) {
+            for (auto [v,w] : neiLight[u])
+                reqL[tid][owner[v]].push_back({v, tent[u]+w});
+            for (auto [v,w] : neiHeavy[u])
+                reqH[tid][owner[v]].push_back({v, tent[u]+w});
+        }
+        buckets[idx][tid].clear();
+    }
     
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::shuffle(owner.begin(), owner.end(), gen);
-    }
-
-    void ensureBucket(int idx)
+    void relaxBuf(bool light, int dstT)
     {
-        if (idx < (int)buckets.size()) return;
-        std::lock_guard<std::mutex> g(resize_mtx);
-        if (idx >= (int)buckets.size())   // check again after lock!
-            buckets.resize(idx + 1, std::vector<std::unordered_set<int>>(num_threads));
-    }
+        auto &buffer = (light ? reqL : reqH);
 
-    inline void moveToBucket(int threadId, int v, int newD, int oldD)
-    {
-        if (oldD != 2e9) {
-            int oldIdx = (int)(oldD / delta);
-            buckets[oldIdx][threadId].erase(v);
-        }
-
-        int newIdx = (int)(newD / delta);
-        ensureBucket(newIdx);
-
-        if (buckets[newIdx][threadId].empty()) {      
-            std::lock_guard<std::mutex> h(heap_mtx);
-            globalActive.push(newIdx);
-        }
-        buckets[newIdx][threadId].insert(v);
-    }
-
-    void genReq(int from, bool kind)
-    {
-        if(kind){
-            for(auto vertex : neiLight[from]){
-                reqL[owner[from]][owner[vertex.first]].push_back(std::make_pair(vertex.first, tent[from] + vertex.second));
-            }
-        }
-        else{
-            for(auto vertex : neiHeavy[from]){
-                reqH[owner[from]][owner[vertex.first]].push_back(std::make_pair(vertex.first, tent[from] + vertex.second));
-            }
-
-        }
-    }
-
-    void loop1(int th, int idx)  
-    {
-        for (int v : buckets[idx][th]) 
+        for (int srcT = 0; srcT < T; ++srcT)
         {
-            genReq(v,true); 
-            genReq(v,false); 
-        }
+            auto &reqList = buffer[srcT][dstT];
 
-        buckets[idx][th].clear();
-    }
+            for (const auto &req : reqList)
+            {
+                int v = req.first;   
+                int d = req.second;  
 
-    void relaxReqBuf(bool light, int dstT)
-    {
-        auto& buf = light ? reqL : reqH;
-        for (int srcT = 0; srcT < num_threads; ++srcT)
-            for (auto [v,d] : buf[srcT][dstT]) {
-                if (d < tent[v]) {
-                    int old = tent[v];
-                    tent[v]  = d;
-                    moveToBucket(dstT, v, d, old);
+                if (d < tent[v])                
+                {
+                    int oldDist = tent[v];
+                    tent[v] = d;                  
+                    insertVertex(dstT, v, d, oldDist);   
                 }
             }
-        for (int srcT = 0; srcT < num_threads; ++srcT)
-            buf[srcT][dstT].clear();
-    }
 
-    void loop2(int t) 
-        {relaxReqBuf(true , t);}
-
-    void loop3(int t) 
-        {relaxReqBuf(false, t);}
-
-    bool nextBucket(int &idx)
-    {
-        std::lock_guard<std::mutex> h(heap_mtx);
-        while (!globalActive.empty()) {
-            idx = globalActive.top();
-            /* is the whole bucket[idx] empty across all threads? */
-            bool empty = true;
-            for (int t = 0; t < num_threads && empty; ++t)
-                empty = empty && buckets[idx][t].empty();
-            if (!empty) 
-                return true;              
-            globalActive.pop();                    // stale index, discard
+            reqList.clear();
         }
-        return false;                              
     }
 
-    void findShortest(int s)
+    void loop2(int t) {
+        relaxBuf(true, t);
+    }
+
+    void loop3(int t) {
+        relaxBuf(false,t);
+    }
+
+
+    void startPhase(Phase p) {
+        phase.store(p, std::memory_order_relaxed);  
+        phase_barrier.arrive_and_wait();         
+    }
+
+    void worker(int tid) {
+        bool run = true;
+        while (run) {
+            phase_barrier.arrive_and_wait();         
+            switch (phase.load(std::memory_order_relaxed)) {
+            case GEN_REQ_LIGHT: 
+                loop1(tid, curBucket.load());          
+                break;
+            case RELAX_LIGHT: 
+                loop2(tid);                            
+                break;
+            case RELAX_HEAVY:    
+                loop3(tid);          
+                break;
+            case EXIT:           
+                run = false;         
+                break;
+            }
+            phase_barrier.arrive_and_wait();       
+        }
+    }
+
+public:
+    DeltaSteppingParallelDynamic(const Graph& g,int d,int threads)
+        : G(g), delta(d), T(threads), delta_max(std::max(1, g.maxDist/8)),
+          tent(g.n,INF), inBucket(g.n,0),
+          buckets(1,std::vector<std::vector<int>>(threads)),
+          reqL(threads,std::vector<std::vector<std::pair<int,int>>>(threads)),
+          reqH(threads,std::vector<std::vector<std::pair<int,int>>>(threads)),
+          phase_barrier(threads+1)                // +1 main
     {
         splitNeighbors();
         assignThreads();
+        startWorkers();
+    }
 
+    ~DeltaSteppingParallelDynamic() {  
+        for (auto &t : pool) 
+            t.join();
+    }
+
+    const std::vector<int>& distances() {
+        return tent;
+    }
+
+    void findShortest(int s) {
         tent[s] = 0;
-        int t0  = owner[s];
-        buckets[0][t0].insert(s);
-        globalActive.push(0);
+        insertVertex(owner[s], s, 0, INF);
 
-        std::vector<std::thread> pool(num_threads);
         int idx;
-
         while (nextBucket(idx)) {
+            curBucket.store(idx,std::memory_order_relaxed);
 
-            while (true) {                 // LIGHT phase loops 1+2
-                std::vector<std::thread> pool(num_threads);
+            int lightRounds = 0;
 
-                // generate requests from current bucket
-                for (int t = 0; t < num_threads; ++t)
-                    pool[t] = std::thread(&DeltaSteppingParallelDynamic::loop1,
-                                          this, t, idx);
-                for (auto& th : pool) th.join();
-
-                // relax light requests
-                for (int t = 0; t < num_threads; ++t)
-                    pool[t] = std::thread(&DeltaSteppingParallelDynamic::loop2,
-                                          this, t);
-                for (auto& th : pool) th.join();
-
-                bool empty = true;
-                for (int t = 0; t < num_threads && empty; ++t)
-                    empty = empty && buckets[idx][t].empty();
-                if (empty)
-                    break;
+            while (true) {
+                ++lightRounds;                 
+                startPhase(GEN_REQ_LIGHT);   
+                phase_barrier.arrive_and_wait();
+                startPhase(RELAX_LIGHT);   
+                phase_barrier.arrive_and_wait();
+                if (bucketEmpty(idx))       
+                    break;                
             }
 
-            // heavy requests
-            for (int t = 0; t < num_threads; ++t)
-                pool[t] = std::thread(&DeltaSteppingParallelDynamic::loop3,
-                                      this, t);
-            for (auto& th : pool) 
-                th.join();
+            startPhase(RELAX_HEAVY);
+            phase_barrier.arrive_and_wait();
+
+            // number of lightRounds we want before delta changes is dependant on graph size
+            if (lightRounds > 30 && delta < delta_max && rebuild_cnt < MAX_REBUILDS) {
+                rebuild_all_for_new_delta(delta * 2);
+                ++rebuild_cnt;
+            }
         }
+
+        startPhase(EXIT);    
+
     }
 };

@@ -49,7 +49,6 @@ void Graph::parse_graph(const std::string &filename)
             std::string tag;
             int e;
             in >> tag >> n >> e;
-            // initialise n vectors of outgoing edges
             for (int i = 0; i < n; i++)
             {
                 std::vector<std::pair<int, int>> V;
