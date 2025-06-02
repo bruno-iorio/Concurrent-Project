@@ -133,9 +133,7 @@ public:
 };
 */
 
-
 class DeltaSteppingParallelDynamic {
-public:
     const int INF = 2e9;
     const int MAX_REBUILDS;
     const int delta_update;
@@ -144,12 +142,12 @@ public:
     enum Phase {IDLE, GEN_REQ_LIGHT, RELAX_LIGHT, RELAX_HEAVY, EXIT};
 
     const Graph &G;
-    int delta;
+    double delta;
     const int T;             
     int rebuild_cnt = 0;         
-    const int delta_max;          
+    const double delta_max;          
 
-    std::vector<int> tent;
+    std::vector<double> tent;
     std::vector<char> inBucket;  // vertex live flag
     std::vector<int>  owner;  // vertex to thread
 
@@ -158,8 +156,8 @@ public:
     std::mutex heap_mtx, resize_mtx;
 
     // pre-split neighbor lists to skip weight check 
-    std::vector<std::vector<std::pair<int,int>>> neiLight, neiHeavy;
-    std::vector<std::vector<std::vector<std::pair<int,int>>>> reqL, reqH;
+    std::vector<std::vector<std::pair<int,double>>> neiLight, neiHeavy;
+    std::vector<std::vector<std::vector<std::pair<int,double>>>> reqL, reqH;
 
     std::vector<std::thread> pool;
     std::barrier<> phase_barrier;
@@ -177,7 +175,7 @@ public:
             neiHeavy[u].push_back({v, w});
     }
 
-    void assignThreads() {
+    void assignThreadsShuffle() {
         owner.resize(G.n);
         int base = G.n / T, extra = G.n % T, idx = 0;
         for (int t = 0; t < T; ++t) {
@@ -186,8 +184,19 @@ public:
                 owner[idx++] = t;
         }
         // shuffle threads to avoid imbalanced loads
-        std::shuffle(owner.begin(), owner.end(), std::mt19937{std::random_device{}()});
+       std::shuffle(owner.begin(), owner.end(), std::mt19937{std::random_device{}()});
+
+    
     }
+
+    void assignThreads() {
+        owner.resize(G.n);
+        for (int i = 0; i < G.n; ++i)
+            owner[i] = i % T;
+    }
+
+
+
     void startWorkers() {
         pool.resize(T);
         for (int t = 0; t < T; ++t)
@@ -195,8 +204,7 @@ public:
     }
 
 
-    void rebuild_all_for_new_delta(int newDelta)
-{
+    void rebuild_all_for_new_delta(int newDelta) {
     delta = newDelta;                                  
 
     for (int u = 0; u < G.n; ++u) {
@@ -345,13 +353,13 @@ public:
     }
 
 public:
-    DeltaSteppingParallelDynamic(const Graph& g,int d,int threads, int light_threshold = 60, int max_rebuilds = 5)
+    DeltaSteppingParallelDynamic(const Graph& g, double d, int threads, int light_threshold = 60, int max_rebuilds = 5)
         : G(g), delta(d), T(threads), delta_max(std::max(1., g.maxDist/8)),
           delta_update(light_threshold), MAX_REBUILDS(max_rebuilds),
           tent(g.n,INF), inBucket(g.n,0),
           buckets(1,std::vector<std::vector<int>>(threads)),
-          reqL(threads,std::vector<std::vector<std::pair<int,int>>>(threads)),
-          reqH(threads,std::vector<std::vector<std::pair<int,int>>>(threads)),
+          reqL(threads,std::vector<std::vector<std::pair<int,double>>>(threads)),
+          reqH(threads,std::vector<std::vector<std::pair<int,double>>>(threads)),
           phase_barrier(threads+1)                // +1 main
     {
         splitNeighbors();
@@ -364,7 +372,7 @@ public:
             t.join();
     }
 
-    const std::vector<int>& distances() {
+    const std::vector<double>& distances() {
         return tent;
     }
 
@@ -391,13 +399,14 @@ public:
             startPhase(RELAX_HEAVY);
             phase_barrier.arrive_and_wait();
 
+            // number of lightRounds we want before delta changes is dependant on graph size
             if (lightRounds > delta_update && delta < 2 * delta_max && rebuild_cnt < MAX_REBUILDS) {
                 rebuild_all_for_new_delta(delta * 2);
                 ++rebuild_cnt;
             }
         }
-
         startPhase(EXIT);    
+	phase_barrier.arrive_and_wait();
 
     }
 };

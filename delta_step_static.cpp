@@ -139,13 +139,24 @@ public:
     {
     }
 
+    inline std::size_t bucketIndex(double d) const
+    {
+    /*  Add half an ULP before floor() so that
+        29.9999999998 → 30 while 29.9998 → 29          */
+    double q = d / delta;
+    double eps = std::ldexp(1.0, -52);           
+    return static_cast<std::size_t>(std::floor(q + 0.5 * eps * std::abs(q)));
+    }
+
+
     void fillNeighbors()
     {
         for (int i = 0; i < graph.n; i++)
         {
             for (auto edge : graph.adj_lists[i])
-            {
-                if (edge.second <= delta)
+            {   
+                const double EPS = 1e-12 * delta;
+                if (edge.second < delta + EPS)
                     NeighborsLight[i].push_back(edge);
                 else
                     NeighborsHeavy[i].push_back(edge);
@@ -238,9 +249,9 @@ public:
                     if (propDist < tent[vertex])
                     {   
                         double olddist = tent[vertex];
-                        int oldbucket_ind = int(tent[vertex] / delta);
+                        size_t oldbucket_ind = bucketIndex(tent[vertex]);
                         tent[vertex] = propDist;
-                        int newbucket_ind = int(propDist / delta);
+                        size_t newbucket_ind = bucketIndex(propDist);
                         if (olddist < 2e9)
                             buckets[oldbucket_ind][to_thread].erase(vertex);
                         buckets[newbucket_ind][to_thread].insert(vertex);
@@ -259,9 +270,9 @@ public:
                     if (propDist < tent[vertex])
                     {   
                         double olddist = tent[vertex];
-                        int oldbucket_ind = int(tent[vertex] / delta);
+                        size_t oldbucket_ind = bucketIndex(tent[vertex]);
                         tent[vertex] = propDist;
-                        int newbucket_ind = int(propDist / delta);
+                        size_t newbucket_ind = bucketIndex(propDist);
                         if (olddist < 2e9)
                             buckets[oldbucket_ind][to_thread].erase(vertex);
                         buckets[newbucket_ind][to_thread].insert(vertex);
