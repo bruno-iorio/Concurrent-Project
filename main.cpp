@@ -1,108 +1,131 @@
+// alg_compare.cpp
+// -------------------------------------------------------------
+// Build example:
+//
+// g++ -std=c++17 -O3 -pthread \
+//     graph.cpp dijkstra.cpp delta_stepping_static.cpp \
+//     delta_stepping_dynamic.cpp alg_compare.cpp -o alg_compare
+// -------------------------------------------------------------
+//CHATPGT WAS USED WHEN BUILDING THIS FILE
+
+/*
+ g++ -std=c++20 -O3 -pthread graph.cpp dijkstra.cpp delta_step_static.cpp delta_step_dynamic.cpp alg_compare.cpp -o alg_compare
+ */
+#include <chrono>
+#include <iomanip>
 #include <iostream>
+#include <string>
 #include <vector>
-#include <limits>
+#include <thread>
 #include <algorithm>
-void initializeGraph(std::vector<std::vector<int>>& Edges,int& n, int& maxEdge){
-  for(int i = 0; i < n; i++){
-    for(int j = 0; j != i; j++){
-      std::cout << "Input the weight of Edge (-1 means unreachable)" << i << " and " << j << " ";
-      std::cin >> Edges[i][j];
-      Edges[j][i] = Edges[i][j];
-      if (Edges[i][j] > maxEdge){
-        maxEdge = Edges[i][j]; 
-      }
+
+#include "dijkstra.cpp"
+#include "delta_step_static.cpp"   
+#include "delta_step_dynamic.cpp"  
+#include "graph.hpp"
+
+/* ------------------------------------------------------------------ */
+/* helpers                                                            */
+/* ------------------------------------------------------------------ */
+using Clock = std::chrono::steady_clock;
+
+template <typename Algo>
+double timeAlgo(const char* name, Algo&& algo, int source)
+{
+    auto t0 = Clock::now();
+    algo.findShortest(source);
+    auto t1 = Clock::now();
+    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    return ms;
+}
+
+template <typename DistA, typename DistB>
+void checkEqual(const std::vector<DistA>& a,
+                const std::vector<DistB>& b,
+                const char* what)
+{
+    if (a.size() != b.size()) {
+        std::cerr << "Size mismatch in " << what << "\n";
+        std::abort();
     }
-  }
+    for (size_t i = 0; i < a.size(); ++i)
+        if (static_cast<long long>(a[i]) !=
+            static_cast<long long>(b[i])) {
+            std::cerr << "Mismatch at vertex " << i
+                      << " (" << what << ")\n";
+            std::abort();
+        }
 }
 
 
-class DeltaStepping{ // sequential version of the algorithm
-  public:
-    DeltaStepping(std::vector<std::vector<int>> graph, int maxEdge, double delta){
-      this->n = graph.size();
-      this->maxEdge = maxEdge;
-      this->delta = delta;
-      this->graph = graph;
-      int n_buckets = maxEdge / delta  + 1;
-      B = std::vector<std::vector<int>>(n_buckets);
-      tent.resize(n);
-      std::fill(tent.begin(),tent.end(),-1);
+void benchmark_roadmap(const std::string filename, int option, int delta, int threads, int light = 60 , int rebuilds = 5){
+	Graph G;
+	G.parse_graph(filename);
+	double time;
+	if(option == 0){
+    		Dijkstra alg(G);
+    		time = timeAlgo("Dijkstra", alg, 0);
+	}
+	else if(option == 1){
+    		DeltaSteppingSequential alg(G,delta);
+    		time = timeAlgo("dss", alg, 0);
+	}
+	else if(option == 2){
+    		DeltaSteppingParallelStatic alg(G,delta,threads);
+    		time = timeAlgo("dsps", alg, 0);
+	}
+	else if(option == 3){
+	DeltaSteppingParallelDynamic alg(G,delta,threads,light,rebuilds);
+    		time = timeAlgo("dspd", alg, 0);
+	}
+	std::cout << time << "\n";
+}
 
-    }
-    void findShortest(int source, int destination){
-      relax(source, 0);
-      std::vector<int> light, heavy;
-      int i;
-      while (!BucketEmpty(i)){
-        std::vector<int> R;
-        std::vector<std::pair<int,int>> Req;
-        while (!B[i].empty()){
-          Req  = findRequests(B[i],light);
-          for(int e : B[i]){
-            if (B[i].end() != std::find(B[i].begin(),B[i].end(),e)) R.push_back(e); 
-          }
-            B[i].clear();
-            relaxRequest(Req);
-          }
-        Req = findRequests(R,heavy);
-        relaxRequest(Req);
-        }
-      }
-    
-
-    std::vector<std::pair<int,int>> findRequests(std::vector<int> V, std::vector<int> kind){
-      std::vector<std::pair<int,int>> res;
-      for(int v : V){
-        for (int w = 0; w != n; w++){
-          if(graph[w][v] >= 0){
-            res.push_back({w, tent[v] + graph[w][v]});
-          }
-        }
-      }
-      return res;
-    }
-    
-    void relaxRequest(std::vector<std::pair<int,int>> Req){
-      for(auto request : Req){
-        relax(request.first,request.second);
-      }
-    }
-
-    bool BucketEmpty(int& non_empty_index){
-      for (int i = 0; i != B.size(); i++){
-        if (B[i].empty()) {
-          non_empty_index = i;
-          return false;
-        }
-      }
-      return true;
-    }
-
-    void relax(int w, int x){
-      if (x < tent[w]){
-        B[tent[w]/delta].erase(std::remove(B[tent[w] / delta].begin(), B[tent[w]/delta].end(), w));
-        B[x / delta].push_back(w);
- tent[w] = x;
-      }
-    }
-    int delta, maxEdge;
-    size_t n;
-
-    std::vector<double> tent;
-    std::vector<std::vector<int>> graph, B;
-};
-
-void Dijkstra(std::vector<std::vector<int>> Graph, int source, int destination); // to be implemented
-
-int main(){
-  int n; // number of nodes
-  int maxEdge;
-  std::cout << " Input the number of Edges: ";
-  std::cin >> n;
-  std::vector<std::vector<int>> Graph(n, std::vector<int>(n,-1));
-  
-  initializeGraph(Graph, n,maxEdge);
-  return 0;
+void benchmark_random_graph(int c, int option, double delta, int threads, int avg, int light=60, int rebuilds=5){
+	Graph G;
+	int n = 1 << 17;
+	int m = n * c; // n times density
+	wideWeightRandomGraph(n,m,0,10,G);
+	double time = 0;
+	for(int i = 0 ; i != avg; i++){
+		if(option == 0){
+			Dijkstra alg(G);
+			time += timeAlgo("Dijkstra", alg, 0);
+		}
+		else if(option == 1){
+			DeltaSteppingSequential alg(G,delta);
+			time += timeAlgo("dsss", alg, 0);
+		}
+		else if(option == 2){
+			DeltaSteppingParallelStatic alg(G,delta,threads);
+			time += timeAlgo("dsps", alg, 0);
+		}
+		else if(option == 3){
+			DeltaSteppingParallelDynamic alg(G,delta,threads,light,rebuilds);
+			time += timeAlgo("dspd", alg, 0);
+		}
+	}
+	std::cout << time / (double) avg << '\n';
 }
 
 
+
+int main(int argc, char* argv[])
+{
+    if(argc != 9) {
+        std::cout << "Usage: " << argv[0] << " threads delta option average density light rebuilds road_map\n";
+        return 1;
+    }
+    int          threads = std::stoi(argv[1]);
+    double         delta = std::stod(argv[2]);
+    int           option = std::stoi(argv[3]);
+    int          average = std::stoi(argv[4]);
+    int                c = std::stoi(argv[5]);
+    int            light = std::stoi(argv[6]);
+    int         rebuilds = std::stoi(argv[7]);
+    std::string filename = argv[8];
+    
+    if(!filename.ends_with(".gr")) benchmark_random_graph(c,option,delta,threads,average,light,rebuilds);
+    else benchmark_roadmap(filename,option,delta,threads,light,rebuilds);
+    return 0;
+}
