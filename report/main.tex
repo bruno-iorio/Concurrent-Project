@@ -1,0 +1,252 @@
+% Solution to Exercise 3
+\documentclass[12pt]{article}
+\usepackage{amsmath,amssymb,amsthm,geometry}
+\usepackage[T1]{fontenc}     % for proper hyphenation / accent handling
+\usepackage[utf8]{inputenc}  % if you need to type accented characters
+\usepackage[polish]{babel}
+\usepackage{algorithm}    % provides the floating “Algorithm” environment
+\usepackage{algorithmicx}  % provides the “algorithmic” environment inside the float
+\usepackage{algpseudocode}
+
+\geometry{margin=2.5cm}
+
+%------------------------------------------------------------------
+%  Environments
+%------------------------------------------------------------------
+\newtheorem{lemma}{Lemma}
+\newtheorem{remark}{Remark}
+\newtheorem{proposition}{Proposition}
+
+\begin{document}
+\begin{center}
+  {\LARGE\bfseries CSE305 FINAL PROJECT REPORT}\\[1.5em]
+  {\large Marcel Chwiałkowski, \; Anca Sfia, \; Bruno Iorio}
+\end{center}
+
+\vspace{2em}
+
+
+In this project we explore the Delta‐stepping algorithm for solving the single‐source shortest path (SSSP) problem in graphs. The report firstly describes the basic Delta‐stepping algorithm and its variations (static and dynamic implementations), and presents certain established results on its performance. Later, we take a look at the structure of our project – the algorithms that we implemented, helper functions for generating random graphs and scripts for analyzing results. Finally, we present the results of our experiments on the performance of different variants of Delta‐stepping on different graphs and parameters, and compare it to regular serial Dijkstra.
+
+\vspace{1em}
+
+\textbf{Contributions to the project were distributed among the team members as follows:}
+\begin{enumerate}
+  \item Marcel Chwiałkowski – Dijkstra, serial Delta‐Stepping, parallel Delta‐stepping (static variant)
+  \item Anca Sfia – serial and parallel Delta‐stepping (dynamic variant)
+  \item Bruno Iorio – ? 
+\end{enumerate}
+
+\vspace{2em}
+\section{Introduction}
+
+The Delta-stepping algorithm is an easily parallelizable solution to the SSSP problem. It principle, it works similarly to Dijkstra’s algorithm - both algorithms maintain an array \texttt{dist} of tentative distances, which keeps the current distance of each vertex from the source throughout the runtime of the algorithm. At initialisation, each distance is set to $+\infty$, and throughout the runtime, as the algorithms scan through edges, new shorter paths are found and the tentative distances relax, finally yielding an array of exact shortest distances between vertices and the source. However, Dijkstra’s algorithm goes vertex-by-vertex: it keeps a priority queue of unvisited nodes sorted by the lowest tentative distance, and at each iteration it pops the first node of the queue, and relaxes all the edges going out from it. This presents a challenge for parallelization, since subsequent relaxations depend on each other, which makes it difficult to perform several relaxations at once, 
+
+In comparison, Delta stepping maintains a set of buckets   $[B_1, B_2, …]$ such that the bucket $B_i$ holds unvisited vertices with tentative distance between $[i \times \Delta, (i + 1) \times \Delta)$. Then, the buckets are emptied sequentially: starting from the non-empty bucket with the smallest index, all the edges coming out of vertices from this bucket are relaxed until the bucket is empty. This involves dividing the edges into heavy and light edges so that each light edge has weight less than $\Delta$, and each heavy edge has weight of $\Delta$ or more. For a bucket $B_i$, firstly, all the light edges are relaxed at once - but since they have a weight of less than $\Delta$, this means that some vertices can be inserted into $B_i$,  thus this step is reiterated until $B_i$ is empty. Afterwards, all heavy edges are relaxed at once - since their weight is more than $\Delta$, the relaxed vertices will only be inserted to buckets with index larger than $i$.
+
+This  step is repeated, at each time emptying the non-empty bucket with the smallest index - this smallest index grows at each step, as it is impossible to for example when processing $B_i$, insert a vertex into $B_{i-1}$. The algorithm eventually terminates when all the buckets are empty.
+
+\begin{algorithm}
+\caption{Sequential $\Delta$‐Stepping (Pseudocode)}
+\label{alg:delta_stepping}
+\begin{algorithmic}[1]
+\Require 
+    \(G = (V, E)\), source vertex $s$, a bucket width $Delta > 0$.
+\ForAll{$v \in V$}
+    \State $dist[v] = +\infty$, $B_{+\infty} \gets \{v\}$
+\EndFor
+\State $dist[s] = 0$, $B_0 \gets \{s\}$, \(i \gets 0\)  
+\While{there exists some \(j \ge i\) with \(B[j]\neq \emptyset\)} 
+    \State \(R \gets \varnothing\)  
+    \While{\(B[i]\neq \emptyset\)}
+        \State Extract an arbitrary vertex \(u\) from \(B[i]\)
+        \State \(R \gets R \,\cup\, \{u\}\)
+
+        \ForAll{edges \((u \to v)\) \textbf{such that} \(w(u,v)\le \Delta\)} 
+            \Comment{Relax light edgs}
+            \If{\(\mathit{dist}[\,v\,] > \mathit{dist}[\,u\,] + w(u,v)\)} 
+                \State \(\mathit{oldBucket} \gets \bigl\lfloor \mathit{dist}[\,v\,] / \Delta \bigr\rfloor\)
+                \State \(\mathit{dist}[\,v\,] \gets \mathit{dist}[\,u\,] + w(u,v)\)
+                \State \(\mathit{newBucket} \gets \bigl\lfloor \mathit{dist}[\,v\,] / \Delta \bigr\rfloor\)
+                    \State Remove \(v\) from \(B[\mathit{oldBucket}]\) 
+                \State Insert \(v\) into \(B[\mathit{newBucket}]\)
+            \EndIf
+        \EndFor
+    \EndWhile
+    \ForAll{\(u \in R\)}
+        \ForAll{edges \((u \to v)\in E\) \textbf{such that} \(w(u,v) > \Delta\)} 
+            \Comment{Relax heavy edges}
+            \If{\(\mathit{dist}[\,v\,] > \mathit{dist}[\,u\,] + w(u,v)\)} 
+                \State \(\mathit{oldBucket} \gets \bigl\lfloor \mathit{dist}[\,v\,] / \Delta \bigr\rfloor\)
+                \State \(\mathit{dist}[\,v\,] \gets \mathit{dist}[\,u\,] + w(u,v)\)
+                \State \(\mathit{newBucket} \gets \bigl\lfloor \mathit{dist}[\,v\,] / \Delta \bigr\rfloor\)
+                    \State Remove \(v\) from \(B[\mathit{oldBucket}]\)
+                \State Insert \(v\) into \(B[\mathit{newBucket}]\)
+            \EndIf
+        \EndFor
+    \EndFor
+\EndWhile
+
+\State \Return \(\mathit{dist}\)
+\end{algorithmic}
+\end{algorithm}
+
+Pseudocode for the $\Delta$-stepping algorithm can be seen above. In contrast to Dijkstra, $\Delta$-stepping is easily parallelizable - when emptying each bucket, the order of relaxation doesn't matter, therefore the contents of each bucket can be relaxed in parallel. 
+\subsection{Theoretical guarantees}
+basically whats written in the first paper. choose the relevant ones - complexity on arbitrary graphs for arbitrary edge weights, and complexity on random graphs for random edge weights.
+
+\subsection{When Does Delta-Stepping Excel?}
+Delta-stepping is especially effective when:
+\begin{itemize}
+    \item The graph is large, so synchronization overhead is amortized.
+    \item Edge weights are similar, enabling large buckets and high parallelism.
+    \item Average degree is small, so each thread's local work is substantial and conflicts are rare.
+    \item The graph diameter is low, so few buckets must be processed and threads do not idle.
+    \item Edge weight distribution is unknown: dynamic delta adapts at runtime for optimal bucket sizing.
+    \item The graph is subject to dynamic updates (adding or removing vertices, edges): dynamic delta can adjust to changes without full recomputation, unlike Dijkstra's algorithm.
+\end{itemize}
+
+\section{Parallelization}
+\subsection{Static Parallelization}
+ describe what it is - quick
+\subsection{Dynamic Parallelization}
+The algorithm is split into three main phases per bucket: 
+\begin{enumerate}
+    \item Generating light requests
+    \item Relaxing light requests
+    \item Relaxing heavy requests
+\end{enumerate}
+
+If too many light rounds are spent, delta is doubled and all buckets and neighbour lists are rebuilt.
+\subsection{Comparison (TODO: just do it according to the second paper? }
+ copy stuff from the 2nd paper.
+
+\section{Our implementations}
+\subsection{Static Parallel $\Delta$-stepping}
+ design choices
+\subsection{Dynamic Parallel $\Delta$-stepping}
+ design choices
+\section{Benchmarking}
+bruno!
+
+\section{Static Parallel $\Delta$-stepping}
+In \emph{static} delta-stepping, the value of $\Delta$ is chosen before the runtime of the algorithm, often based on heuristics or limited experimentation on the given graph. The algorithm then proceeds using this fixed value for all bucket divisions and edge classifications. This approach is simple to implement and incurs minimal overhead, as there is no need to monitor or adapt $\Delta$ during the computation. However, choosing an optimal static $\Delta$ can be challenging:
+\begin{itemize}
+    \item If $\Delta$ is too small, the number of buckets increases and each light-edge closure involves fewer vertices, resulting in more synchronization rounds (in parallel settings) and less opportunity for work aggregation.
+    \item If $\Delta$ is too large, too many edges are treated as light, making each relaxation round expensive and reducing parallelism, and the algorithm turns into Dijkstra's.
+\end{itemize}
+
+Static $\Delta$-stepping's performance is sensitive to the choice of $\Delta$ and the weight distribution in the input graph.
+
+In \emph{dynamic} delta-stepping, the value of $\Delta$ is adapted at runtime based on observed algorithmic behavior. It increases $\Delta$ when too many light-edge relaxation rounds are required for a bucket. This adaptivity is especially valuable in graphs with skewed or heterogeneous weight distributions. The main practical advantages are:
+\begin{itemize}
+    \item The algorithm can start with a small $\Delta$ and increase it over time
+    \item Dynamic adjustment makes the algorithm less susceptible to weird input variations, reducing the need for tuning or prior knowledge.
+\end{itemize}
+
+The tradeoff is the overhead for rebuilding buckets and neighbor lists when $\Delta$ is changed.
+
+
+
+
+
+\section{Dynamic Parallel $\Delta$-stepping}
+\subsection{Introduction}
+Similar to the static version, vertices are grouped into buckets based on their tentative distances. For each bucket, light edges are processed first, repeatedly relaxing them. If the algorithm spends too many relaxations on light edges in the same bucket, it is interpreted as $\Delta$ being too small. The width of the buckets is doubled and all the buckets are rebuilt for efficiency, automatically adapting $\Delta$ based on the observations made.
+
+The smallest non-empty bucket index is maintained in a min-heap for efficiency when rebuilding buckets. The buckets allow for fast insert/erase. The design allows a good tradeoff between the speed of large delta (giving fewer buckets and more relaxed light updates) and the accuracy of small delta. The algorithm never re-relaxes the same edge unlesss necessary, and increases $\Delta$ when deeming it inefficient.
+
+\subsection{Complexity}
+
+Let $n$ be the number of vertices, $m$ the number of edges, $L$ the maximum shortest-path distance from the source, and $\delta$ the bucket width parameter. Define:
+
+\begin{itemize}
+    \item $n_\delta = |C_\delta|$: number of pairs of nodes connected by a $\delta$-path.
+    \item $m_\delta = |C_{\delta+}|$: number of triples $(u, v, w)$ where $u, v$ are connected by a $\delta$-path and $(v, w)$ is a light edge.
+    \item $d$: maximum degree.
+    \item $\ell_\delta$: maximum number of edges in a $\delta$-path plus one.
+\end{itemize}
+
+For an arbitrary graph with arbitrary positive edge weights:
+\[
+\text{Time} = O\left( n + m + \frac{L}{\delta} + n_\delta + m_\delta \right)
+\]
+
+For arbitrary graphs with random positive edge weights and $\delta = O(1/d)$:
+\[
+\text{Time} = O(n + m + d L)
+\]
+
+\begin{algorithm}
+\caption{Parallel Dynamic $\Delta$‐Stepping (Pseudocode)}
+\label{alg:parallel_delta_stepping}
+\begin{algorithmic}[1]
+\Require 
+    $G = (V, E)$, source $s$, initial bucket width $\Delta > 0$, thread count $T$
+\ForAll{$v \in V$ \textbf{in parallel}}
+    \State $dist[v] \gets +\infty$
+\EndFor
+\State $dist[s] \gets 0$
+\State Insert $s$ into its appropriate bucket
+\State \textbf{split} each $u$'s outgoing edges into ``light'' ($\leq \Delta$) and ``heavy'' ($>\Delta$)
+\State Assign each $v$ to an ``owner'' thread (e.g., $v \bmod T$)
+\State Initialize per-thread request buffers and thread pool
+
+\While{some bucket is nonempty}
+    \State $idx \gets$ index of the next non-empty bucket (min index)
+    \Repeat
+        \State \textbf{Parallel phase: generate requests for light edges}
+        \ForAll{threads $t=1..T$ \textbf{in parallel}}
+            \ForAll{$u$ in bucket $idx$ owned by $t$}
+                \ForAll{light $(u \to v)$}
+                    \State Thread $t$ appends $(v, dist[u] + w(u,v))$ to the request buffer for $owner[v]$
+                \EndFor
+                \ForAll{heavy $(u \to v)$}
+                    \State Thread $t$ appends $(v, dist[u] + w(u,v))$ to the heavy request buffer for $owner[v]$
+                \EndFor
+            \EndFor
+            \State Clear bucket $idx$ for thread $t$
+        \EndFor
+
+        \State \textbf{Parallel phase: process light requests}
+        \ForAll{threads $t=1..T$ \textbf{in parallel}}
+            \ForAll{light requests $(v, d)$ in $t$'s buffer}
+                \If{$d < dist[v]$}
+                    \State $oldBucket \gets \lfloor dist[v] / \Delta \rfloor$
+                    \State $dist[v] \gets d$
+                    \State $newBucket \gets \lfloor d / \Delta \rfloor$
+                    \State Remove $v$ from $B[oldBucket]$; Insert $v$ into $B[newBucket]$
+                \EndIf
+            \EndFor
+            \State Clear light request buffer for $t$
+        \EndFor
+
+        \State \textbf{Synchronize threads (barrier)}
+    \Until{all buckets at $idx$ are empty}
+    
+    \State \textbf{Parallel phase: process heavy requests}
+    \ForAll{threads $t=1..T$ \textbf{in parallel}}
+        \ForAll{heavy requests $(v, d)$ in $t$'s buffer}
+            \If{$d < dist[v]$}
+                \State $oldBucket \gets \lfloor dist[v] / \Delta \rfloor$
+                \State $dist[v] \gets d$
+                \State $newBucket \gets \lfloor d / \Delta \rfloor$
+                \State Remove $v$ from $B[oldBucket]$; Insert $v$ into $B[newBucket]$
+            \EndIf
+        \EndFor
+        \State Clear heavy request buffer for $t$
+    \EndFor
+
+    \If{too many light rounds at this bucket}
+        \State $\Delta \gets 2\Delta$; Rebuild edge partitions and buckets accordingly
+    \EndIf
+\EndWhile
+\State \Return $dist$
+\end{algorithmic}
+\end{algorithm}
+
+
+
+
+\end{document}
+
