@@ -141,8 +141,7 @@ public:
 
     inline std::size_t bucketIndex(double d) const
     {
-    /*  Add half an ULP before floor() so that
-        29.9999999998 → 30 while 29.9998 → 29          */
+    /*  magic constant to keep from numerical issue  */
     double q = d / delta;
     double eps = std::ldexp(1.0, -52);           
     return static_cast<std::size_t>(std::floor(q + 0.5 * eps * std::abs(q)));
@@ -155,6 +154,7 @@ public:
         {
             for (auto edge : graph.adj_lists[i])
             {   
+                //magic constant to keep from numerical issues
                 const double EPS = 1e-12 * delta;
                 if (edge.second < delta + EPS)
                     NeighborsLight[i].push_back(edge);
@@ -328,7 +328,7 @@ private:
     // this handles how the thread works - between phases, it doesnt disappear, but it kind of sleeps
     void worker(int thread_id)
     {
-        for (;;)
+        while(true)
         {
             sync.arrive_and_wait();
 

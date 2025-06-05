@@ -204,7 +204,7 @@ class DeltaSteppingParallelDynamic {
     }
 
 
-    void rebuild_all_for_new_delta(int newDelta) {
+    void rebuild_all_for_new_delta(double newDelta) {
     delta = newDelta;                                  
 
     for (int u = 0; u < G.n; ++u) {
@@ -246,7 +246,7 @@ class DeltaSteppingParallelDynamic {
             buckets.resize(idx+1,std::vector<std::vector<int>>(T));
     }
 
-    void insertVertex(int tid, int v, int newD, int oldD) {
+    void insertVertex(int tid, int v, double newD, double oldD) {
         if (oldD != INF) {
             int oldIdx = oldD / delta;
             auto &vec = buckets[oldIdx][tid];
@@ -291,7 +291,7 @@ class DeltaSteppingParallelDynamic {
         buckets[idx][tid].clear();
     }
     
-    void relaxBuf(bool light, int dstT)
+    void relaxBuf(bool light, double dstT)
     {
         auto &buffer = (light ? reqL : reqH);
 
@@ -302,11 +302,11 @@ class DeltaSteppingParallelDynamic {
             for (const auto &req : reqList)
             {
                 int v = req.first;   
-                int d = req.second;  
+                double d = req.second;  
 
                 if (d < tent[v])                
                 {
-                    int oldDist = tent[v];
+                    double oldDist = tent[v];
                     tent[v] = d;                  
                     insertVertex(dstT, v, d, oldDist);   
                 }
