@@ -1,3 +1,4 @@
+# ChatGPT generated
 CXX = g++                                # C++ compiler
 CXXFLAGS = -std=c++20 -fopenmp -O3 -pthread  # Compiler flags
 
