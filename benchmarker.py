@@ -2,6 +2,8 @@ import subprocess
 import pandas as pd
 import numpy as np
 
+## The code was reorganized with the aid of chatgpt
+
 # Configuration
 binary = "./main"
 avg_runs = 3
