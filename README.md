@@ -10,7 +10,7 @@ There are 3 principal ways to test our code.
 3. dijkstra.cpp - dijkstra for reference.
 4. graph.cpp/hpp - function for parsing graphs, and functions for generating random graphs.
 ## Remarks:
-To run the code on roadgraphs, you need to create a graphs folder. Within that folder, place .gr files. Compreseed .gr files can be found in the road_maps folder on this repo, Otherwise pure .gr files are here: https://drive.google.com/drive/folders/1FwBzXuSA6Vf93w2rZlDwk9j8Adu-oOSI?usp=sharing
+To run the code on roadgraphs, you **need** to create a graphs folder. Within that folder, place .gr files. Compressed .gr files can be found in the road_maps folder on this repo, Otherwise pure .gr files are here: https://drive.google.com/drive/folders/1FwBzXuSA6Vf93w2rZlDwk9j8Adu-oOSI?usp=sharing
 
 ## Group Members:
 - Bruno Iorio
