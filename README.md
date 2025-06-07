@@ -1,7 +1,7 @@
 # Concurrent-Project
 ## Running the code:
 There are 3 principal ways to test our code. 
-1. main.cpp - To be compiled with ```g++ -std=c++20 -O3 main.cpp -pthread graph.cpp dijkstra.cpp delta_step_static.cpp delta_step_dynamic.cpp -o main```. Allows to run an algorithm once, see commandline arguments for parameter specifications. Disclaimer: We used chatGPT writing this part of code, as we deemed it was not core of the project. 
+1. main.cpp - To be compiled with ```g++ -std=c++20 -O3 main.cpp -pthread graph.cpp dijkstra.cpp delta_step_static.cpp delta_step_dynamic.cpp -o main``` or by running ```make```. Allows to run an algorithm once, see commandline arguments for parameter specifications. Disclaimer: We used chatGPT writing this part of code, as we deemed it was not core of the project. 
 2. benchmarker.py - to be ran with ```python3 benchmarker.py```. Runs main.cpp a number of times with different parameter ranges.
 3. alg_compare.cpp - This is the method we recommend for simple testing. Compile with ```g++ -std=c++20 -O3 -pthread graph.cpp dijkstra.cpp delta_step_static.cpp delta_step_dynamic.cpp alg_compare.cpp -o alg_compare``` Lines 58 to 80 allow to set parameters, and pick what graph to test on. Disclaimer: We used chatGPT writing this part of code, as we deemed it was not core of the project.
 ## Core files:
