@@ -1,2 +1,2 @@
-threads,delta,light,rebuilds,time_es
-2,200,60,5,172.8195
+threads,delta,light,rebuilds,time_es,cpu_load
+2,8000,60,5,45.82966666666667,1.26175

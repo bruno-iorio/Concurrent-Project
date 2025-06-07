@@ -1,2 +1,2 @@
-threads,delta,time_es
-2,200,232.3885
+threads,delta,time_es,cpu_load
+4,9000,85.675,1.20178
