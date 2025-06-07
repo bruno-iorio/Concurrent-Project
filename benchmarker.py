@@ -4,12 +4,12 @@ import numpy as np
 
 # Configuration
 binary = "./main"
-avg_runs = 2
+avg_runs = 3
 
 # Default Parameters
 DEFAULTS = {
     'threads': 2,
-    'delta': 200,
+    'delta': 8000,
     'density': 32,
     'light': 60,
     'rebuilds': 5
@@ -37,30 +37,32 @@ ROADMAP_NAMES = {
 "NW"  : "USA-road-d.NW.gr"
 }
 
-# Parameter sweeps
-threads_list     = list(range(2, 10))
-delta_list_long  = list(range(1,300,30))
+# Parameter ranges
+threads_list     = list(range(1, 10))
+delta_list_long  = list(range(1000,10000,200))
 delta_list_short = list(np.linspace(0.1, 1.0, num=8))
 density_list     = [1 << k for k in range(3, 8)] # for density tests
 light_list       = list(range(10, 200, 20))
 rebuild_list     = list(range(1, 10))
 
-# User options
-option_algo = 3        # Set 0-3
+#optionsa
+option_algo = 0      # Set 0-3
 option_graph = 0       # Set 0 or 1
 option_roadmap = "CAL"
 
 fixed_thread = 2
-fixed_delta = 200
+fixed_delta = 8000
 
+
+
+# Some testing options to manually set
 test_density = False
-test_long_delta = False
+test_long_delta = True
 test_roadmap = True
 test_rebuild_and_light = False
 test_fixed_thread = True
 test_fixed_delta = True
 
-# Sanity checks
 if option_algo not in ALGO_NAMES or option_graph not in GRAPH_NAMES or option_roadmap not in ROADMAP_NAMES:
     raise ValueError("Invalid algorithm or graph option selected")
 
@@ -83,16 +85,26 @@ if test_fixed_delta == True:
     delta_list = [fixed_delta]
 
 print(f"Starting benchmark for '{algo_name}' on graph '{graph_name}'\n")
-def run_and_get_avg(cmd, avg=avg_runs):
-    try:
-        output = subprocess.check_output(cmd, text=True)
-        return float(output) / avg
-    except subprocess.CalledProcessError as e:
-        print(f"Error during subprocess: {e}")
-        return None
+
+
 
 def append_result(**kwargs):
     results.append(kwargs)
+
+def run_and_get_avg(cmd, avg=avg_runs):
+    try:
+        output = subprocess.check_output(cmd, text=True).strip()
+        # output format: "<time_elapsed> <cpu_load>"
+        parts = output.split()
+        if len(parts) != 2:
+            print(f"Unexpected output format: {output}")
+            return None, None
+        time_elapsed = float(parts[0]) / avg
+        cpu_load = float(parts[1]) / avg
+        return time_elapsed, cpu_load
+    except subprocess.CalledProcessError as e:
+        print(f"Error during subprocess: {e}")
+        return None, None
 
 # --------------------------- Run Modes ----------------------------
 
@@ -100,39 +112,39 @@ if test_density:
     for density in density_list:
         print(f"Testing density {density}...")
         cmd = [binary, str(DEFAULTS['threads']), str(DEFAULTS['delta']), str(option_algo),
-               str(avg_runs), str(density), str(DEFAULTS['light']), str(DEFAULTS['rebuilds']),
+                str(density), str(DEFAULTS['light']), str(DEFAULTS['rebuilds']),
                road_file]
-        avg_time = run_and_get_avg(cmd)
+        avg_time, cpu_load = run_and_get_avg(cmd)
         if avg_time is not None:
             append_result(threads=DEFAULTS['threads'], delta=DEFAULTS['delta'], density=density, time_es=avg_time)
 
 elif option_algo == 0:  # Dijkstra
     print("Running Dijkstra...")
-    cmd = [binary, "0", "0", "0", str(avg_runs), str(DEFAULTS['density']), "0", "0" ,road_file]
-    avg_time = run_and_get_avg(cmd)
+    cmd = [binary, "0", "0", "0",  str(DEFAULTS['density']), "0", "0" ,road_file]
+    avg_time,cpu_load = run_and_get_avg(cmd)
     if avg_time is not None:
-        append_result(time_es=avg_time)
+        append_result(time_es=avg_time, cpu_load=cpu_load)
 
 elif option_algo == 1:  # Sequential
     for delta in delta_list:
         print(f"Δ: {delta:.2f}")
         cmd = [binary, "0", str(delta), str(option_algo),
-               str(avg_runs), str(DEFAULTS['density']),
+               str(DEFAULTS['density']),
                str(0), str(0), road_file]
-        avg_time = run_and_get_avg(cmd)
+        avg_time,cpu_load = run_and_get_avg(cmd)
         if avg_time is not None:
-            append_result(delta=delta, time_es=avg_time)
+            append_result(delta=delta, time_es=avg_time, cpu_load=cpu_load)
 
 elif option_algo == 2:  # Parallel Static
     for threads in threads_list:
         for delta in delta_list:
             print(f"Threads: {threads}, Δ: {delta:.2f}")
             cmd = [binary, str(threads), str(delta), str(option_algo),
-                   str(avg_runs), str(DEFAULTS['density']),"0", 
+                  str(DEFAULTS['density']),"0", 
                    "0", road_file]
-            avg_time = run_and_get_avg(cmd)
+            avg_time,cpu_load = run_and_get_avg(cmd)
             if avg_time is not None:
-                append_result(threads=threads, delta=delta, time_es=avg_time)
+                append_result(threads=threads, delta=delta, time_es=avg_time, cpu_load=cpu_load)
 
 elif option_algo == 3:  # Parallel Dynamic
     for threads in threads_list:
@@ -142,21 +154,24 @@ elif option_algo == 3:  # Parallel Dynamic
                     for rebuild in rebuild_list:
                         print(f"Threads: {threads}, Δ: {delta:.2f}, Light: {light}, Rebuilds: {rebuilds}")
                         cmd = [binary, str(threads), str(delta), str(option_algo),
-                               str(avg_runs), str(DEFAULTS['density']),
+                               str(DEFAULTS['density']),
                                str(light), str(rebuilds), road_file]
-                        avg_time = run_and_get_avg(cmd)
+                        avg_time, cpu_load = run_and_get_avg(cmd)
                         if avg_time is not None:
                             append_result(threads=threads, delta=delta, light=light,
-                                          rebuilds=rebuilds, time_es=avg_time)
+                                          rebuilds=rebuilds, time_es=avg_time,cpu_load=cpu_load)
             else: 
                 print(f"Threads: {threads}, Δ: {delta:.2f}")
                 cmd = [binary, str(threads), str(delta), str(option_algo),
-                       str(avg_runs), str(DEFAULTS['density']),
+                       str(DEFAULTS['density']),
                        str(DEFAULTS['light']), str(DEFAULTS['rebuilds']), road_file]
-                avg_time = run_and_get_avg(cmd)
+                avg_time,cpu_load = run_and_get_avg(cmd)
                 if avg_time is not None:
                     append_result(threads=threads, delta=delta, light=DEFAULTS['light'],
-                                  rebuilds=DEFAULTS['rebuilds'], time_es=avg_time)
+                                  rebuilds=DEFAULTS['rebuilds'], time_es=avg_time, cpu_load=cpu_load)
+
+
+
 
 # -------------------------- Save Results ---------------------------
 df = pd.DataFrame(results)
