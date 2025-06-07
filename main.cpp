@@ -1,16 +1,6 @@
-// alg_compare.cpp
-// -------------------------------------------------------------
-// Build example:
-//
-// g++ -std=c++17 -O3 -pthread \
-//     graph.cpp dijkstra.cpp delta_stepping_static.cpp \
-//     delta_stepping_dynamic.cpp alg_compare.cpp -o alg_compare
-// -------------------------------------------------------------
+
 //CHATPGT WAS USED WHEN BUILDING THIS FILE
 
-/*
- g++ -std=c++20 -O3 -pthread graph.cpp dijkstra.cpp delta_step_static.cpp delta_step_dynamic.cpp alg_compare.cpp -o alg_compare
- */
 #include <chrono>
 #include <iomanip>
 #include <iostream>
